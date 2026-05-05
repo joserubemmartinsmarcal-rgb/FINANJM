@@ -1,0 +1,1004 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Central de Guinchos – Gestão</title>
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+body { background: #F5F7FB; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; color:#0F172A; }
+input[type=number]::-webkit-inner-spin-button, input[type=number]::-webkit-outer-spin-button { -webkit-appearance: none; }
+select, input, textarea { -webkit-appearance: none; appearance: none; font-family: inherit; }
+::-webkit-scrollbar { width: 6px; }
+::-webkit-scrollbar-thumb { background: #CBD5E1; border-radius: 8px; }
+
+.fade-in { animation: fadeIn 0.25s ease; }
+@keyframes fadeIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+.modal-overlay { position: fixed; inset: 0; z-index: 50; display: flex; align-items: flex-end; justify-content: center;
+  background: rgba(15,23,42,0.5); backdrop-filter: blur(4px); }
+@media (min-width: 640px) { .modal-overlay { align-items: center; padding: 1rem; } }
+.modal-box { background:#fff; width:100%; max-width:32rem; max-height:92vh; overflow-y:auto; border-radius:1.5rem 1.5rem 0 0; }
+@media (min-width: 640px) { .modal-box { border-radius: 1rem; } }
+.btn { display:inline-flex; align-items:center; justify-content:center; gap:0.5rem;
+  padding:0.625rem 1rem; border-radius:0.75rem; font-weight:700; font-size:0.875rem;
+  cursor:pointer; border:none; transition:opacity .15s, transform .1s; }
+.btn:active { transform: scale(0.96); } .btn:hover { opacity: 0.88; }
+.badge { display:inline-block; padding:0.2rem 0.6rem; border-radius:0.4rem; font-size:0.7rem; font-weight:700; }
+.card { background:#fff; border:1px solid #E2E8F0; border-radius:1rem;
+  box-shadow:0 1px 3px rgba(15,23,42,0.04), 0 4px 12px rgba(15,23,42,0.04); padding:1.25rem; }
+.input-field { width:100%; padding:0.625rem 0.875rem; border-radius:0.5rem; font-size:0.875rem;
+  background:#F1F5F9; border:1.5px solid transparent; color:#0F172A; outline:none; transition:all .15s; }
+.input-field:focus { background:#fff; border-color:#1E3A6F; }
+.label-text { font-size:0.7rem; font-weight:700; text-transform:uppercase; letter-spacing:0.05em; color:#475569; display:block; margin-bottom:0.375rem; }
+.tab-btn { display:flex; flex-direction:column; align-items:center; gap:0.25rem;
+  padding:0.5rem 0.25rem; border-radius:0.75rem; border:none; background:transparent; cursor:pointer;
+  flex:1; min-width:0; transition:background .15s; font-size:0.6rem; font-weight:700; }
+.subtab-btn { padding:0.5rem 1rem; border-radius:0.625rem; font-weight:700; font-size:0.8rem;
+  border:none; cursor:pointer; transition:all .15s; }
+.progress-bar { height:0.5rem; border-radius:9999px; overflow:hidden; background:#F1F5F9; }
+.progress-fill { height:100%; border-radius:9999px; transition:width 0.4s; }
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script>
+// ════════════════════════════════════════════════════
+//  CENTRAL DE GUINCHOS – Sistema de Gestão
+//  Single-file HTML app · localStorage · mobile-first
+// ════════════════════════════════════════════════════
+
+const C = {
+  bg:"#F5F7FB", card:"#FFFFFF",
+  navy:"#1E3A6F", navyDark:"#142850",
+  ink:"#0F172A", inkSoft:"#475569", inkMute:"#94A3B8",
+  primary:"#FF6B35", green:"#10B981", red:"#EF4444",
+  amber:"#F59E0B", purple:"#8B5CF6", cyan:"#06B6D4",
+  pink:"#EC4899", border:"#E2E8F0", borderSoft:"#F1F5F9",
+};
+
+const STATUS_ATD = ["Solicitado","A Caminho","Guinchando","Finalizado","Cancelado"];
+const STATUS_COR = {
+  "Solicitado": C.amber, "A Caminho": C.cyan, "Guinchando": C.purple,
+  "Finalizado": C.green, "Cancelado": C.inkMute,
+};
+const STATUS_GUINCHO = ["Livre","Em Atendimento","Manutenção","Inativo"];
+const STATUS_GUINCHO_COR = {
+  "Livre": C.green, "Em Atendimento": C.cyan, "Manutenção": C.amber, "Inativo": C.inkMute,
+};
+const TIPOS_GUINCHO = ["Plataforma","Asa Delta","Leve","Pesado"];
+const TIPOS_VEICULO = ["Carro","Moto","Caminhonete","Caminhão","Van","Outros"];
+const CATEGORIAS_DESPESA = ["Combustível","Manutenção","Pneus","Salários","Comissões","IPVA/Licenciamento","Seguro","Outras"];
+
+// ─── UTILS ────────────────────────────────────────
+const uid = () => Date.now().toString(36)+Math.random().toString(36).slice(2,7);
+const todayISO = () => new Date().toISOString().slice(0,10);
+const nowHHMM = () => new Date().toTimeString().slice(0,5);
+const isVencido = d => d && d < todayISO();
+const fmtBRL = v => (Number(v)||0).toLocaleString("pt-BR",{style:"currency",currency:"BRL"});
+const fmtCompact = v => {
+  const n = Number(v)||0;
+  if (Math.abs(n)>=1000) return `R$ ${(n/1000).toFixed(1)}k`;
+  return fmtBRL(n);
+};
+const fmtDate = iso => { if(!iso) return "—"; const [y,m,d]=iso.split("-"); return `${d}/${m}/${y}`; };
+const escHtml = s => String(s||"").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;");
+
+// ─── STORAGE ──────────────────────────────────────
+const KEYS = { atendimentos:"gp:atd", guinchos:"gp:gui", motoristas:"gp:mot", seguradoras:"gp:seg", despesas:"gp:desp" };
+const load = k => { try { return JSON.parse(localStorage.getItem(k)||"null"); } catch(e) { return null; } };
+const save = (k,v) => { try { localStorage.setItem(k,JSON.stringify(v)); } catch(e){} };
+
+// ─── DEFAULTS (primeiro uso) ─────────────────────
+function defaultGuinchos(){
+  return Array.from({length:11},(_,i)=>({
+    id:"g"+(i+1), prefixo:"G"+String(i+1).padStart(2,"0"),
+    placa:"", modelo:"", tipo:"Plataforma", status:"Livre", km:0, obs:"",
+  }));
+}
+function defaultSeguradoras(){
+  return [{ id:"porto", nome:"Porto Seguro", valorSaida:0, valorKm:0, prazoDias:30 }];
+}
+
+// ─── ESTADO ───────────────────────────────────────
+const state = {
+  tab: "dashboard",
+  subTabCadastros: "seguradoras",
+  filterAtd: "abertos",
+  atendimentos: load(KEYS.atendimentos) || [],
+  guinchos: load(KEYS.guinchos) || defaultGuinchos(),
+  motoristas: load(KEYS.motoristas) || [],
+  seguradoras: load(KEYS.seguradoras) || defaultSeguradoras(),
+  despesas: load(KEYS.despesas) || [],
+  modal: null,
+  modalData: null,
+  search: "",
+};
+// força salvar defaults na primeira execução
+if (!load(KEYS.guinchos)) save(KEYS.guinchos, state.guinchos);
+if (!load(KEYS.seguradoras)) save(KEYS.seguradoras, state.seguradoras);
+
+function setState(patch){ Object.assign(state,patch); render(); }
+function persist(key,arr){ save(KEYS[key],arr); setState({[key]:arr}); }
+
+// ─── ICONS ────────────────────────────────────────
+const ICONS = {
+  barChart:`<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="12" width="4" height="9"/><rect x="10" y="6" width="4" height="15"/><rect x="17" y="3" width="4" height="18"/></svg>`,
+  truck:`<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="1" y="3" width="15" height="13"/><polygon points="16 8 20 8 23 11 23 16 16 16 16 8"/><circle cx="5.5" cy="18.5" r="2.5"/><circle cx="18.5" cy="18.5" r="2.5"/></svg>`,
+  list:`<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>`,
+  users:`<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>`,
+  dollar:`<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>`,
+  plus:`<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>`,
+  trash:`<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>`,
+  edit:`<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>`,
+  check:`<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>`,
+  x:`<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>`,
+  phone:`<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.127.96.361 1.903.7 2.81a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0 1 22 16.92z"/></svg>`,
+  pin:`<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>`,
+  arrow:`<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>`,
+  calendar:`<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>`,
+  search:`<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>`,
+  alert:`<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>`,
+  clock:`<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>`,
+};
+
+// ─── HELPERS ──────────────────────────────────────
+function badge(text,color){ return `<span class="badge" style="background:${color}1F;color:${color}">${text}</span>`; }
+function btn(text,id,variant="primary",icon="",extra=""){
+  const styles = {
+    primary:`background:${C.navy};color:#fff;`,
+    accent:`background:${C.primary};color:#fff;`,
+    success:`background:${C.green};color:#fff;`,
+    danger:`background:${C.red};color:#fff;`,
+    ghost:`background:${C.borderSoft};color:${C.ink};`,
+  };
+  return `<button class="btn ${extra}" id="${id}" style="${styles[variant]||styles.primary}">${icon}${text}</button>`;
+}
+function inputField(label,id,type="text",value="",placeholder="",extra=""){
+  return `<label style="display:block"><span class="label-text">${label}</span>
+    <input class="input-field" id="${id}" type="${type}" value="${escHtml(value)}" placeholder="${placeholder}" ${extra}/></label>`;
+}
+function textareaField(label,id,value="",placeholder=""){
+  return `<label style="display:block"><span class="label-text">${label}</span>
+    <textarea class="input-field" id="${id}" rows="2" placeholder="${placeholder}">${escHtml(value)}</textarea></label>`;
+}
+function selectField(label,id,options,selected="",placeholder="Selecione..."){
+  const opts = options.map(o=>{
+    const v = typeof o==="object"?o.value:o;
+    const t = typeof o==="object"?o.label:o;
+    return `<option value="${escHtml(v)}" ${v===selected?"selected":""}>${escHtml(t)}</option>`;
+  }).join("");
+  return `<label style="display:block"><span class="label-text">${label}</span>
+    <select class="input-field" id="${id}"><option value="">${placeholder}</option>${opts}</select></label>`;
+}
+
+// ─── RENDER ───────────────────────────────────────
+function render(){
+  document.getElementById("app-root").innerHTML = buildApp();
+  bindEvents();
+  if (state.tab==="dashboard") setTimeout(renderChart7d, 50);
+}
+
+function buildApp(){
+  return `
+  <div style="min-height:100vh;background:${C.bg}">
+    ${buildHeader()}
+    <main style="max-width:900px;margin:0 auto;padding:1.25rem 1rem 7rem;">
+      ${state.tab==="dashboard" ? buildDashboard() : ""}
+      ${state.tab==="atendimentos" ? buildAtendimentos() : ""}
+      ${state.tab==="frota" ? buildFrota() : ""}
+      ${state.tab==="cadastros" ? buildCadastros() : ""}
+      ${state.tab==="financeiro" ? buildFinanceiro() : ""}
+    </main>
+    ${buildBottomNav()}
+    ${state.modal ? buildModal() : ""}
+  </div>`;
+}
+
+// ─── HEADER ───────────────────────────────────────
+function buildHeader(){
+  const livres = state.guinchos.filter(g=>g.status==="Livre").length;
+  const ativos = state.atendimentos.filter(a=>a.status!=="Finalizado"&&a.status!=="Cancelado").length;
+  return `
+  <header style="position:sticky;top:0;z-index:40;background:linear-gradient(135deg,${C.navy} 0%,${C.navyDark} 100%);box-shadow:0 4px 16px rgba(30,58,111,0.2);padding:0.75rem 1rem;">
+    <div style="max-width:900px;margin:0 auto;display:flex;align-items:center;gap:0.75rem;">
+      <div style="width:44px;height:44px;background:linear-gradient(135deg,${C.primary} 0%,#E55A2B 100%);border:2px solid rgba(255,255,255,0.25);border-radius:0.75rem;display:flex;align-items:center;justify-content:center;flex-shrink:0;color:#fff;">
+        ${ICONS.truck}
+      </div>
+      <div style="flex:1;">
+        <div style="color:#fff;font-weight:800;font-size:1.05rem;font-family:Georgia,serif;letter-spacing:-0.02em;">Central de Guinchos</div>
+        <div style="color:#B8C5DB;font-size:0.7rem;font-weight:600;">${ativos} atendimento${ativos!==1?"s":""} ativo${ativos!==1?"s":""} · ${livres}/${state.guinchos.length} livres</div>
+      </div>
+    </div>
+  </header>`;
+}
+
+// ─── BOTTOM NAV ───────────────────────────────────
+function buildBottomNav(){
+  const tabs = [
+    {id:"dashboard",label:"Painel",icon:ICONS.barChart},
+    {id:"atendimentos",label:"Atendimentos",icon:ICONS.list},
+    {id:"frota",label:"Frota",icon:ICONS.truck},
+    {id:"cadastros",label:"Cadastros",icon:ICONS.users},
+    {id:"financeiro",label:"Financeiro",icon:ICONS.dollar},
+  ];
+  const items = tabs.map(t=>`
+    <button class="tab-btn" data-tab="${t.id}"
+      style="color:${state.tab===t.id?C.navy:C.inkMute};background:${state.tab===t.id?C.navy+"12":"transparent"}">
+      <span style="color:${state.tab===t.id?C.navy:C.inkMute}">${t.icon}</span>
+      <span>${t.label}</span>
+    </button>`).join("");
+  return `
+  <nav style="position:fixed;bottom:0;left:0;right:0;z-index:40;background:${C.card};border-top:1px solid ${C.border};box-shadow:0 -4px 16px rgba(15,23,42,0.06);padding:0.5rem 0.5rem max(0.5rem,env(safe-area-inset-bottom));">
+    <div style="max-width:900px;margin:0 auto;display:flex;justify-content:space-around;">${items}</div>
+  </nav>`;
+}
+
+// ═══════════════════════════════════════════════════
+// ─── DASHBOARD ────────────────────────────────────
+// ═══════════════════════════════════════════════════
+function buildDashboard(){
+  const mes = todayISO().slice(0,7);
+  const hoje = todayISO();
+  const atdHoje = state.atendimentos.filter(a=>a.data===hoje && a.status!=="Cancelado").length;
+  const atdMes = state.atendimentos.filter(a=>a.data?.startsWith(mes) && a.status!=="Cancelado");
+  const ativos = state.atendimentos.filter(a=>a.status!=="Finalizado"&&a.status!=="Cancelado");
+  const fatMes = atdMes.filter(a=>a.status==="Finalizado").reduce((s,a)=>s+Number(a.valor||0),0);
+  const ticketMedio = atdMes.length>0?fatMes/atdMes.filter(a=>a.status==="Finalizado").length:0;
+  const livres = state.guinchos.filter(g=>g.status==="Livre").length;
+  const aReceber = state.atendimentos.filter(a=>a.status==="Finalizado"&&!a.pago).reduce((s,a)=>s+Number(a.valor||0),0);
+
+  const ativosList = ativos.slice(0,4).map(a=>{
+    const seg = state.seguradoras.find(s=>s.id===a.seguradoraId);
+    const gui = state.guinchos.find(g=>g.id===a.guinchoId);
+    return `
+    <div class="card fade-in" style="padding:0.875rem;cursor:pointer;" data-edit-atd="${a.id}">
+      <div style="display:flex;align-items:center;gap:0.625rem;margin-bottom:0.375rem;">
+        ${badge(a.status,STATUS_COR[a.status]||C.inkMute)}
+        ${gui?`<span style="font-size:0.7rem;color:${C.inkSoft};font-weight:700">${gui.prefixo}</span>`:""}
+        <span style="font-size:0.7rem;color:${C.inkMute};margin-left:auto">${ICONS.clock} ${a.hora||""}</span>
+      </div>
+      <div style="font-weight:700;font-size:0.875rem;">${escHtml(a.clienteNome||"—")}</div>
+      <div style="font-size:0.75rem;color:${C.inkSoft};margin-top:0.125rem;">${escHtml(a.veiculoModelo||"")} ${a.veiculoPlaca?`· ${escHtml(a.veiculoPlaca)}`:""}</div>
+      <div style="font-size:0.7rem;color:${C.inkMute};margin-top:0.25rem;">${escHtml(a.origem||"")} ${ICONS.arrow} ${escHtml(a.destino||"")}</div>
+      ${seg?`<div style="margin-top:0.375rem;">${badge(seg.nome,C.navy)}</div>`:""}
+    </div>`;
+  }).join("");
+
+  return `
+  <div class="fade-in" style="display:flex;flex-direction:column;gap:1rem;">
+    <!-- HERO -->
+    <div style="background:linear-gradient(135deg,${C.navy} 0%,${C.navyDark} 100%);border-radius:1rem;padding:1.25rem;box-shadow:0 4px 20px rgba(30,58,111,0.18);">
+      <div style="color:#B8C5DB;font-size:0.65rem;font-weight:700;text-transform:uppercase;letter-spacing:0.1em;">Faturamento do mês</div>
+      <div style="color:#fff;font-size:2rem;font-weight:800;letter-spacing:-0.03em;margin-top:0.25rem;">${fmtBRL(fatMes)}</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.75rem;margin-top:1rem;">
+        <div style="padding:0.75rem;border-radius:0.75rem;background:rgba(255,255,255,0.1);">
+          <div style="color:#B8C5DB;font-size:0.6rem;font-weight:700;text-transform:uppercase;">Atendimentos / mês</div>
+          <div style="color:#fff;font-weight:800;font-size:1.1rem;margin-top:0.25rem;">${atdMes.length}</div>
+        </div>
+        <div style="padding:0.75rem;border-radius:0.75rem;background:rgba(255,255,255,0.1);">
+          <div style="color:#B8C5DB;font-size:0.6rem;font-weight:700;text-transform:uppercase;">Ticket médio</div>
+          <div style="color:#fff;font-weight:800;font-size:1.1rem;margin-top:0.25rem;">${fmtCompact(ticketMedio)}</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- KPIs -->
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.75rem;">
+      ${kpiMini("Hoje",atdHoje.toString(),C.cyan,ICONS.calendar)}
+      ${kpiMini("Em andamento",ativos.length.toString(),C.amber,ICONS.alert)}
+      ${kpiMini("Frota livre",`${livres}/${state.guinchos.length}`,C.green,ICONS.truck)}
+      ${kpiMini("A receber",fmtCompact(aReceber),C.purple,ICONS.dollar)}
+    </div>
+
+    <!-- ATIVOS -->
+    <div>
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.625rem;">
+        <span style="font-weight:700;color:${C.ink};font-size:0.95rem;">Atendimentos em andamento</span>
+        ${ativos.length>4?`<button class="btn ver-todos" style="background:transparent;color:${C.navy};font-size:0.75rem;padding:0.25rem 0.5rem;">Ver todos →</button>`:""}
+      </div>
+      ${ativos.length===0
+        ? `<div class="card"><div style="text-align:center;padding:1.5rem;color:${C.inkMute};font-size:0.85rem;">Nenhum atendimento ativo</div></div>`
+        : `<div style="display:flex;flex-direction:column;gap:0.625rem;">${ativosList}</div>`}
+    </div>
+
+    <!-- CHART -->
+    <div class="card" style="border-top:3px solid ${C.primary}">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.75rem;">
+        <span style="font-weight:700;font-size:0.95rem;color:${C.ink}">Atendimentos por dia</span>
+        <span style="font-size:0.7rem;color:${C.inkMute}">Últimos 7 dias</span>
+      </div>
+      <canvas id="chart7d" height="160"></canvas>
+    </div>
+  </div>`;
+}
+
+function kpiMini(label,value,color,icon){
+  return `
+  <div class="card" style="border-top:3px solid ${color};padding:1rem;">
+    <div style="padding:0.5rem;border-radius:0.625rem;background:${color}15;width:fit-content;margin-bottom:0.5rem;color:${color}">${icon}</div>
+    <div style="font-size:0.65rem;font-weight:700;text-transform:uppercase;color:${C.inkMute};">${label}</div>
+    <div style="font-weight:800;font-size:1.15rem;color:${C.ink};letter-spacing:-0.02em;">${value}</div>
+  </div>`;
+}
+
+function renderChart7d(){
+  const canvas = document.getElementById("chart7d");
+  if (!canvas) return;
+  const ctx = canvas.getContext("2d");
+  const days = [];
+  for (let i=6;i>=0;i--){
+    const d = new Date(); d.setDate(d.getDate()-i);
+    const iso = d.toISOString().slice(0,10);
+    const lbl = d.toLocaleDateString("pt-BR",{weekday:"short"}).replace(".","");
+    const count = state.atendimentos.filter(a=>a.data===iso&&a.status!=="Cancelado").length;
+    days.push({lbl,count,iso});
+  }
+  const W = canvas.offsetWidth; canvas.width = W; canvas.height = 160;
+  const pad = {l:30,r:10,t:10,b:30};
+  const cw = W-pad.l-pad.r, ch = 160-pad.t-pad.b;
+  const maxV = Math.max(...days.map(d=>d.count),3);
+  ctx.clearRect(0,0,W,160);
+  ctx.strokeStyle = "#E2E8F0"; ctx.lineWidth=1;
+  for (let i=0;i<=4;i++){
+    const y = pad.t+ch*(1-i/4);
+    ctx.beginPath(); ctx.moveTo(pad.l,y); ctx.lineTo(W-pad.r,y); ctx.stroke();
+    ctx.fillStyle = C.inkMute; ctx.font="10px sans-serif"; ctx.textAlign="right";
+    ctx.fillText(Math.round(maxV*i/4), pad.l-4, y+3);
+  }
+  const bw = cw/days.length*0.65;
+  days.forEach((d,i)=>{
+    const x = pad.l+i*(cw/days.length)+(cw/days.length-bw)/2;
+    const h = (d.count/maxV)*ch;
+    ctx.fillStyle = C.primary;
+    ctx.beginPath(); ctx.roundRect(x,pad.t+ch-h,bw,h,[4,4,0,0]); ctx.fill();
+    ctx.fillStyle = C.inkSoft; ctx.font="10px sans-serif"; ctx.textAlign="center";
+    ctx.fillText(d.lbl, x+bw/2, pad.t+ch+16);
+    if (d.count>0){
+      ctx.fillStyle = C.ink; ctx.font="bold 10px sans-serif";
+      ctx.fillText(d.count, x+bw/2, pad.t+ch-h-4);
+    }
+  });
+}
+
+// ═══════════════════════════════════════════════════
+// ─── ATENDIMENTOS ─────────────────────────────────
+// ═══════════════════════════════════════════════════
+function buildAtendimentos(){
+  const filt = state.filterAtd;
+  let lista = [...state.atendimentos];
+  if (filt==="abertos") lista = lista.filter(a=>a.status!=="Finalizado"&&a.status!=="Cancelado");
+  else if (filt==="finalizados") lista = lista.filter(a=>a.status==="Finalizado");
+  if (state.search) {
+    const s = state.search.toLowerCase();
+    lista = lista.filter(a=>(a.clienteNome||"").toLowerCase().includes(s)||(a.veiculoPlaca||"").toLowerCase().includes(s));
+  }
+  lista.sort((a,b)=>(b.data+b.hora).localeCompare(a.data+a.hora));
+
+  const items = lista.length===0
+    ? `<div class="card"><div style="text-align:center;padding:2rem;color:${C.inkMute};font-size:0.85rem;">Nenhum atendimento</div></div>`
+    : lista.map(a=>{
+        const seg = state.seguradoras.find(s=>s.id===a.seguradoraId);
+        const gui = state.guinchos.find(g=>g.id===a.guinchoId);
+        const mot = state.motoristas.find(m=>m.id===a.motoristaId);
+        return `
+        <div class="card fade-in" style="padding:1rem;border-left:3px solid ${STATUS_COR[a.status]||C.inkMute}">
+          <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:0.5rem;margin-bottom:0.5rem;">
+            <div style="display:flex;gap:0.375rem;flex-wrap:wrap;">
+              ${badge(a.status,STATUS_COR[a.status])}
+              ${a.tipoFatu==="Avulso"?badge("Avulso",C.amber):""}
+              ${seg?badge(seg.nome,C.navy):""}
+              ${a.pago?badge("Pago",C.green):""}
+            </div>
+            <span style="font-size:0.7rem;color:${C.inkMute};white-space:nowrap;">${fmtDate(a.data)} ${a.hora||""}</span>
+          </div>
+          <div style="font-weight:700;font-size:0.95rem;">${escHtml(a.clienteNome||"—")} ${a.clienteFone?`<span style="color:${C.inkSoft};font-weight:600;font-size:0.8rem;">· ${escHtml(a.clienteFone)}</span>`:""}</div>
+          <div style="font-size:0.8rem;color:${C.inkSoft};margin-top:0.25rem;">${escHtml(a.veiculoModelo||"")} ${a.veiculoPlaca?`· <strong>${escHtml(a.veiculoPlaca)}</strong>`:""}</div>
+          <div style="font-size:0.75rem;color:${C.inkMute};margin-top:0.375rem;display:flex;align-items:center;gap:0.25rem;flex-wrap:wrap;">
+            ${ICONS.pin} ${escHtml(a.origem||"")} ${ICONS.arrow} ${escHtml(a.destino||"")} ${a.km?`<span style="margin-left:0.25rem;color:${C.inkSoft};">· ${a.km} km</span>`:""}
+          </div>
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-top:0.625rem;padding-top:0.625rem;border-top:1px solid ${C.borderSoft};">
+            <div style="font-size:0.7rem;color:${C.inkSoft};">
+              ${gui?`<strong>${gui.prefixo}</strong>`:"<em style='color:"+C.inkMute+"'>sem guincho</em>"}
+              ${mot?` · ${escHtml(mot.nome)}`:""}
+            </div>
+            <div style="font-weight:800;color:${C.green};font-size:1rem;">${fmtBRL(a.valor||0)}</div>
+          </div>
+          <div style="display:flex;gap:0.375rem;margin-top:0.625rem;flex-wrap:wrap;">
+            <button class="btn edit-atd" data-id="${a.id}" style="background:${C.borderSoft};color:${C.ink};font-size:0.75rem;padding:0.4rem 0.625rem;flex:1;">${ICONS.edit} Editar</button>
+            ${a.status!=="Finalizado"&&a.status!=="Cancelado"?`<button class="btn next-status" data-id="${a.id}" style="background:${C.green};color:#fff;font-size:0.75rem;padding:0.4rem 0.625rem;flex:1;">${ICONS.check} Avançar</button>`:""}
+            <button class="btn del-atd" data-id="${a.id}" style="background:${C.borderSoft};color:${C.red};padding:0.4rem 0.5rem;">${ICONS.trash}</button>
+          </div>
+        </div>`;
+      }).join("");
+
+  const filterBtn = (id,label)=>`<button class="btn filter-atd" data-f="${id}" style="background:${filt===id?C.navy:C.borderSoft};color:${filt===id?"#fff":C.inkSoft};font-size:0.75rem;padding:0.4rem 0.75rem;">${label}</button>`;
+
+  return `
+  <div class="fade-in" style="display:flex;flex-direction:column;gap:1rem;">
+    <div style="display:flex;align-items:center;justify-content:space-between;">
+      <div>
+        <div style="font-weight:800;font-size:1.5rem;color:${C.ink};letter-spacing:-0.02em;">Atendimentos</div>
+        <div style="font-size:0.8rem;color:${C.inkSoft};">${state.atendimentos.length} no total</div>
+      </div>
+      ${btn("Novo","new-atd","accent",ICONS.plus)}
+    </div>
+    <div style="display:flex;gap:0.5rem;flex-wrap:wrap;">
+      ${filterBtn("abertos","Abertos")}
+      ${filterBtn("finalizados","Finalizados")}
+      ${filterBtn("todos","Todos")}
+    </div>
+    <div style="position:relative;">
+      <span style="position:absolute;left:0.75rem;top:50%;transform:translateY(-50%);color:${C.inkMute}">${ICONS.search}</span>
+      <input id="search-input" class="input-field" placeholder="Buscar por cliente ou placa..." value="${escHtml(state.search)}" style="padding-left:2.25rem;background:${C.card};border:1px solid ${C.border};" />
+    </div>
+    ${items}
+  </div>`;
+}
+
+// ═══════════════════════════════════════════════════
+// ─── FROTA ────────────────────────────────────────
+// ═══════════════════════════════════════════════════
+function buildFrota(){
+  const por = {};
+  STATUS_GUINCHO.forEach(s=>por[s]=state.guinchos.filter(g=>g.status===s).length);
+
+  const cards = state.guinchos.map(g=>{
+    const cor = STATUS_GUINCHO_COR[g.status]||C.inkMute;
+    return `
+    <div class="card fade-in" style="padding:1rem;border-top:3px solid ${cor}">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:0.5rem;">
+        <div style="display:flex;align-items:center;gap:0.625rem;">
+          <div style="width:42px;height:42px;border-radius:0.625rem;background:${cor}15;display:flex;align-items:center;justify-content:center;color:${cor};font-weight:800;font-size:0.9rem;">${g.prefixo}</div>
+          <div>
+            <div style="font-weight:700;font-size:0.875rem;">${escHtml(g.placa||"sem placa")}</div>
+            <div style="font-size:0.7rem;color:${C.inkSoft};">${escHtml(g.modelo||"—")}</div>
+          </div>
+        </div>
+        ${badge(g.status,cor)}
+      </div>
+      <div style="display:flex;justify-content:space-between;align-items:center;font-size:0.75rem;color:${C.inkSoft};margin-bottom:0.625rem;">
+        <span>${escHtml(g.tipo)}</span>
+        <span>${(g.km||0).toLocaleString("pt-BR")} km</span>
+      </div>
+      <button class="btn edit-gui" data-id="${g.id}" style="background:${C.borderSoft};color:${C.ink};font-size:0.75rem;padding:0.4rem;width:100%;">${ICONS.edit} Editar</button>
+    </div>`;
+  }).join("");
+
+  return `
+  <div class="fade-in" style="display:flex;flex-direction:column;gap:1rem;">
+    <div style="display:flex;align-items:center;justify-content:space-between;">
+      <div>
+        <div style="font-weight:800;font-size:1.5rem;color:${C.ink};letter-spacing:-0.02em;">Frota</div>
+        <div style="font-size:0.8rem;color:${C.inkSoft};">${state.guinchos.length} guinchos</div>
+      </div>
+      ${btn("Novo","new-gui","accent",ICONS.plus)}
+    </div>
+    <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:0.5rem;">
+      ${["Livre","Em Atendimento","Manutenção","Inativo"].map(s=>`
+        <div style="padding:0.625rem;background:${STATUS_GUINCHO_COR[s]}12;border-radius:0.625rem;">
+          <div style="font-size:0.6rem;color:${STATUS_GUINCHO_COR[s]};font-weight:700;text-transform:uppercase;">${s}</div>
+          <div style="font-weight:800;color:${C.ink};">${por[s]||0}</div>
+        </div>`).join("")}
+    </div>
+    <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:0.625rem;">${cards}</div>
+  </div>`;
+}
+
+// ═══════════════════════════════════════════════════
+// ─── CADASTROS ────────────────────────────────────
+// ═══════════════════════════════════════════════════
+function buildCadastros(){
+  const sub = state.subTabCadastros;
+  const subBtn = (id,label,count)=>`<button class="btn sub-cad" data-s="${id}" style="background:${sub===id?C.navy:C.borderSoft};color:${sub===id?"#fff":C.inkSoft};font-size:0.8rem;padding:0.5rem 1rem;flex:1;">${label} (${count})</button>`;
+
+  let content = "";
+  if (sub==="seguradoras"){
+    const list = state.seguradoras.length===0
+      ? `<div class="card"><div style="text-align:center;padding:1.5rem;color:${C.inkMute};font-size:0.85rem;">Nenhuma seguradora cadastrada</div></div>`
+      : state.seguradoras.map(s=>{
+          const atdMes = state.atendimentos.filter(a=>a.seguradoraId===s.id&&a.data?.startsWith(todayISO().slice(0,7))).length;
+          return `
+          <div class="card fade-in" style="padding:1rem;">
+            <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:0.5rem;">
+              <div>
+                <div style="font-weight:700;font-size:0.95rem;">${escHtml(s.nome)}</div>
+                <div style="font-size:0.7rem;color:${C.inkSoft};">${atdMes} atend. no mês · prazo ${s.prazoDias||0}d</div>
+              </div>
+              <div style="display:flex;gap:0.25rem;">
+                <button class="btn edit-seg" data-id="${s.id}" style="background:${C.borderSoft};color:${C.ink};padding:0.4rem;">${ICONS.edit}</button>
+                <button class="btn del-seg" data-id="${s.id}" style="background:${C.borderSoft};color:${C.red};padding:0.4rem;">${ICONS.trash}</button>
+              </div>
+            </div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.5rem;font-size:0.8rem;">
+              <div><span style="color:${C.inkMute}">Saída:</span> <strong>${fmtBRL(s.valorSaida||0)}</strong></div>
+              <div><span style="color:${C.inkMute}">Por km:</span> <strong>${fmtBRL(s.valorKm||0)}</strong></div>
+            </div>
+          </div>`;
+        }).join("");
+    content = `
+      <div style="display:flex;justify-content:flex-end;">${btn("Nova Seguradora","new-seg","accent",ICONS.plus)}</div>
+      ${list}`;
+  } else {
+    const list = state.motoristas.length===0
+      ? `<div class="card"><div style="text-align:center;padding:1.5rem;color:${C.inkMute};font-size:0.85rem;">Nenhum motorista cadastrado</div></div>`
+      : state.motoristas.map(m=>{
+          const atdMes = state.atendimentos.filter(a=>a.motoristaId===m.id&&a.data?.startsWith(todayISO().slice(0,7))&&a.status==="Finalizado");
+          const fat = atdMes.reduce((s,a)=>s+Number(a.valor||0),0);
+          const com = fat*(Number(m.comissao||0)/100);
+          return `
+          <div class="card fade-in" style="padding:1rem;">
+            <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:0.5rem;">
+              <div>
+                <div style="font-weight:700;font-size:0.95rem;">${escHtml(m.nome)}</div>
+                <div style="font-size:0.7rem;color:${C.inkSoft};">${m.fone?ICONS.phone+" "+escHtml(m.fone)+" · ":""}CNH ${escHtml(m.cnh||"—")}</div>
+              </div>
+              <div style="display:flex;gap:0.25rem;">
+                <button class="btn edit-mot" data-id="${m.id}" style="background:${C.borderSoft};color:${C.ink};padding:0.4rem;">${ICONS.edit}</button>
+                <button class="btn del-mot" data-id="${m.id}" style="background:${C.borderSoft};color:${C.red};padding:0.4rem;">${ICONS.trash}</button>
+              </div>
+            </div>
+            <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:0.5rem;font-size:0.75rem;">
+              <div><span style="color:${C.inkMute}">Atend./mês</span><div style="font-weight:700;">${atdMes.length}</div></div>
+              <div><span style="color:${C.inkMute}">Comissão</span><div style="font-weight:700;">${m.comissao||0}%</div></div>
+              <div><span style="color:${C.inkMute}">A receber</span><div style="font-weight:700;color:${C.green}">${fmtCompact(com)}</div></div>
+            </div>
+          </div>`;
+        }).join("");
+    content = `
+      <div style="display:flex;justify-content:flex-end;">${btn("Novo Motorista","new-mot","accent",ICONS.plus)}</div>
+      ${list}`;
+  }
+
+  return `
+  <div class="fade-in" style="display:flex;flex-direction:column;gap:1rem;">
+    <div>
+      <div style="font-weight:800;font-size:1.5rem;color:${C.ink};letter-spacing:-0.02em;">Cadastros</div>
+      <div style="font-size:0.8rem;color:${C.inkSoft};">Seguradoras e motoristas</div>
+    </div>
+    <div style="display:flex;gap:0.5rem;">
+      ${subBtn("seguradoras","Seguradoras",state.seguradoras.length)}
+      ${subBtn("motoristas","Motoristas",state.motoristas.length)}
+    </div>
+    ${content}
+  </div>`;
+}
+
+// ═══════════════════════════════════════════════════
+// ─── FINANCEIRO ───────────────────────────────────
+// ═══════════════════════════════════════════════════
+function buildFinanceiro(){
+  const mes = todayISO().slice(0,7);
+  const recPorSeg = {};
+  state.atendimentos.filter(a=>a.status==="Finalizado"&&!a.pago).forEach(a=>{
+    const k = a.seguradoraId||"avulso";
+    if (!recPorSeg[k]) recPorSeg[k] = {total:0, count:0, atds:[]};
+    recPorSeg[k].total += Number(a.valor||0);
+    recPorSeg[k].count++;
+    recPorSeg[k].atds.push(a);
+  });
+  const totalReceber = Object.values(recPorSeg).reduce((s,v)=>s+v.total,0);
+  const totalPagar = state.despesas.filter(d=>!d.pago).reduce((s,d)=>s+Number(d.valor||0),0);
+  const fatMes = state.atendimentos.filter(a=>a.data?.startsWith(mes)&&a.status==="Finalizado").reduce((s,a)=>s+Number(a.valor||0),0);
+  const despMes = state.despesas.filter(d=>d.data?.startsWith(mes)).reduce((s,d)=>s+Number(d.valor||0),0);
+  const resMes = fatMes-despMes;
+
+  const recList = Object.entries(recPorSeg).map(([k,v])=>{
+    const seg = state.seguradoras.find(s=>s.id===k);
+    const nome = seg?seg.nome:"Avulsos";
+    return `
+    <div class="card fade-in" style="padding:1rem;">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.5rem;">
+        <div>
+          <div style="font-weight:700;font-size:0.9rem;">${nome}</div>
+          <div style="font-size:0.7rem;color:${C.inkSoft};">${v.count} atend. pendente${v.count>1?"s":""}</div>
+        </div>
+        <div style="font-weight:800;color:${C.green};font-size:1.05rem;">${fmtBRL(v.total)}</div>
+      </div>
+      <button class="btn marcar-pago" data-seg="${k}" style="background:${C.green};color:#fff;font-size:0.75rem;padding:0.4rem;width:100%;">${ICONS.check} Marcar tudo como pago</button>
+    </div>`;
+  }).join("");
+
+  const despList = state.despesas.length===0
+    ? `<div style="text-align:center;padding:1.5rem;color:${C.inkMute};font-size:0.85rem;">Nenhuma despesa cadastrada</div>`
+    : [...state.despesas].sort((a,b)=>(a.data||"").localeCompare(b.data||"")).map(d=>`
+      <div class="card fade-in" style="padding:0.875rem;">
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:0.5rem;">
+          <div style="flex:1;min-width:0;">
+            <div style="font-weight:700;font-size:0.875rem;${d.pago?"text-decoration:line-through;opacity:0.6":""}">${escHtml(d.descricao)}</div>
+            <div style="display:flex;gap:0.375rem;align-items:center;margin-top:0.25rem;flex-wrap:wrap;">
+              ${badge(d.categoria,C.navy)}
+              ${badge(d.pago?"Pago":(isVencido(d.data)?"VENCIDA":"A Pagar"), d.pago?C.green:(isVencido(d.data)?C.red:C.amber))}
+              <span style="font-size:0.7rem;color:${C.inkMute}">${ICONS.calendar} ${fmtDate(d.data)}</span>
+            </div>
+          </div>
+          <div style="display:flex;flex-direction:column;align-items:flex-end;gap:0.375rem;">
+            <span style="font-weight:700;font-size:0.9rem;color:${C.ink}">${fmtBRL(d.valor)}</span>
+            <div style="display:flex;gap:0.25rem;">
+              <button class="btn toggle-desp" data-id="${d.id}" style="padding:0.3rem;background:${d.pago?C.amber+"15":C.green+"15"};color:${d.pago?C.amber:C.green};">${ICONS.check}</button>
+              <button class="btn del-desp" data-id="${d.id}" style="padding:0.3rem;background:${C.borderSoft};color:${C.red};">${ICONS.trash}</button>
+            </div>
+          </div>
+        </div>
+      </div>`).join("");
+
+  return `
+  <div class="fade-in" style="display:flex;flex-direction:column;gap:1rem;">
+    <div>
+      <div style="font-weight:800;font-size:1.5rem;color:${C.ink};letter-spacing:-0.02em;">Financeiro</div>
+      <div style="font-size:0.8rem;color:${C.inkSoft};">Resumo do mês: ${fmtBRL(resMes)}</div>
+    </div>
+
+    <div style="background:linear-gradient(135deg,${resMes>=0?C.green:C.red} 0%,${resMes>=0?"#059669":"#DC2626"} 100%);border-radius:1rem;padding:1.25rem;">
+      <div style="color:#fff;opacity:0.85;font-size:0.65rem;font-weight:700;text-transform:uppercase;">Resultado do mês</div>
+      <div style="color:#fff;font-weight:800;font-size:1.75rem;margin-top:0.25rem;letter-spacing:-0.02em;">${fmtBRL(resMes)}</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.625rem;margin-top:0.875rem;">
+        <div style="padding:0.625rem;border-radius:0.625rem;background:rgba(255,255,255,0.18);">
+          <div style="color:#fff;opacity:0.85;font-size:0.6rem;font-weight:700;text-transform:uppercase;">Receita</div>
+          <div style="color:#fff;font-weight:800;">${fmtCompact(fatMes)}</div>
+        </div>
+        <div style="padding:0.625rem;border-radius:0.625rem;background:rgba(255,255,255,0.18);">
+          <div style="color:#fff;opacity:0.85;font-size:0.6rem;font-weight:700;text-transform:uppercase;">Despesa</div>
+          <div style="color:#fff;font-weight:800;">${fmtCompact(despMes)}</div>
+        </div>
+      </div>
+    </div>
+
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.625rem;">
+      ${kpiMini("A Receber",fmtCompact(totalReceber),C.green,ICONS.dollar)}
+      ${kpiMini("A Pagar",fmtCompact(totalPagar),C.red,ICONS.alert)}
+    </div>
+
+    <div>
+      <div style="font-weight:700;color:${C.ink};font-size:0.95rem;margin-bottom:0.625rem;">A Receber por Seguradora</div>
+      ${Object.keys(recPorSeg).length===0
+        ? `<div class="card"><div style="text-align:center;padding:1.5rem;color:${C.inkMute};font-size:0.85rem;">Nenhum valor pendente</div></div>`
+        : `<div style="display:flex;flex-direction:column;gap:0.625rem;">${recList}</div>`}
+    </div>
+
+    <div>
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.625rem;">
+        <div style="font-weight:700;color:${C.ink};font-size:0.95rem;">Despesas</div>
+        ${btn("Nova","new-desp","accent",ICONS.plus)}
+      </div>
+      <div style="display:flex;flex-direction:column;gap:0.5rem;">${despList}</div>
+    </div>
+  </div>`;
+}
+
+// ═══════════════════════════════════════════════════
+// ─── MODAIS ───────────────────────────────────────
+// ═══════════════════════════════════════════════════
+function buildModal(){
+  let content = "", title = "";
+  if (state.modal==="atendimento"){ title=state.modalData?.id?"Editar Atendimento":"Novo Atendimento"; content=modalAtendimento(); }
+  if (state.modal==="guincho")    { title=state.modalData?.id?"Editar Guincho":"Novo Guincho";       content=modalGuincho(); }
+  if (state.modal==="seguradora") { title=state.modalData?.id?"Editar Seguradora":"Nova Seguradora"; content=modalSeguradora(); }
+  if (state.modal==="motorista")  { title=state.modalData?.id?"Editar Motorista":"Novo Motorista";   content=modalMotorista(); }
+  if (state.modal==="despesa")    { title="Nova Despesa";                                              content=modalDespesa(); }
+  return `
+  <div class="modal-overlay" id="modal-overlay">
+    <div class="modal-box fade-in">
+      <div style="position:sticky;top:0;padding:1rem 1.25rem;display:flex;align-items:center;justify-content:space-between;background:#fff;border-bottom:1px solid ${C.border};">
+        <h3 style="font-weight:800;font-size:1rem;">${title}</h3>
+        <button id="modal-close" style="padding:0.375rem;border:none;background:${C.borderSoft};border-radius:0.5rem;cursor:pointer;">${ICONS.x}</button>
+      </div>
+      <div style="padding:1.25rem;">${content}</div>
+    </div>
+  </div>`;
+}
+
+function modalAtendimento(){
+  const a = state.modalData || {};
+  const segOpts = state.seguradoras.map(s=>({value:s.id,label:s.nome}));
+  const guiOpts = state.guinchos.map(g=>({value:g.id,label:`${g.prefixo} - ${g.placa||"sem placa"}`}));
+  const motOpts = state.motoristas.map(m=>({value:m.id,label:m.nome}));
+  const tipoFatu = a.tipoFatu || "Seguradora";
+  return `
+    <div style="display:flex;flex-direction:column;gap:0.75rem;">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.5rem;">
+        <button id="tipo-seg" class="btn" style="background:${tipoFatu==="Seguradora"?C.navy:C.borderSoft};color:${tipoFatu==="Seguradora"?"#fff":C.inkSoft};">Seguradora</button>
+        <button id="tipo-avu" class="btn" style="background:${tipoFatu==="Avulso"?C.amber:C.borderSoft};color:${tipoFatu==="Avulso"?"#fff":C.inkSoft};">Avulso</button>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.5rem;">
+        ${inputField("Data","f-data","date",a.data||todayISO())}
+        ${inputField("Hora","f-hora","time",a.hora||nowHHMM())}
+      </div>
+      ${inputField("Cliente (nome)","f-cliente","text",a.clienteNome||"","Ex: João Silva")}
+      ${inputField("Telefone","f-fone","tel",a.clienteFone||"","(11) 9 9999-9999")}
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.5rem;">
+        ${inputField("Placa","f-placa","text",a.veiculoPlaca||"","ABC-1234")}
+        ${selectField("Tipo veículo","f-tipoveic",TIPOS_VEICULO,a.veiculoTipo||"")}
+      </div>
+      ${inputField("Modelo","f-modelo","text",a.veiculoModelo||"","Ex: Fiat Uno")}
+      ${inputField("Origem","f-origem","text",a.origem||"","Ex: Av. Paulista, 1000")}
+      ${inputField("Destino","f-destino","text",a.destino||"","Ex: Oficina X, Centro")}
+      ${inputField("Km rodados","f-km","number",a.km||"","0","step=1")}
+      ${tipoFatu==="Seguradora"
+        ? selectField("Seguradora","f-seg",segOpts,a.seguradoraId||"")
+        : ""}
+      ${inputField("Valor (R$)","f-valor","number",a.valor||"","0,00","step=0.01")}
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.5rem;">
+        ${selectField("Guincho","f-gui",guiOpts,a.guinchoId||"")}
+        ${selectField("Motorista","f-mot",motOpts,a.motoristaId||"")}
+      </div>
+      ${selectField("Status","f-status",STATUS_ATD,a.status||"Solicitado")}
+      ${textareaField("Observações","f-obs",a.obs||"","Detalhes do atendimento...")}
+      ${a.id?`
+        <label style="display:flex;align-items:center;gap:0.5rem;font-size:0.85rem;">
+          <input type="checkbox" id="f-pago" ${a.pago?"checked":""}/> Pagamento recebido
+        </label>`:""}
+      ${btn(a.id?"Salvar Alterações":"Adicionar Atendimento","save-atd","primary",ICONS.check,"")}
+    </div>`;
+}
+
+function modalGuincho(){
+  const g = state.modalData || {};
+  return `
+    <div style="display:flex;flex-direction:column;gap:0.75rem;">
+      <div style="display:grid;grid-template-columns:1fr 2fr;gap:0.5rem;">
+        ${inputField("Prefixo","f-pref","text",g.prefixo||"","G12")}
+        ${inputField("Placa","f-placa","text",g.placa||"","ABC-1234")}
+      </div>
+      ${inputField("Modelo","f-modelo","text",g.modelo||"","Ex: Mercedes Atego")}
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.5rem;">
+        ${selectField("Tipo","f-tipo",TIPOS_GUINCHO,g.tipo||"Plataforma")}
+        ${selectField("Status","f-status",STATUS_GUINCHO,g.status||"Livre")}
+      </div>
+      ${inputField("Km atual","f-km","number",g.km||"","0","step=1")}
+      ${textareaField("Observações","f-obs",g.obs||"","")}
+      ${btn(g.id?"Salvar":"Adicionar","save-gui","primary",ICONS.check)}
+    </div>`;
+}
+
+function modalSeguradora(){
+  const s = state.modalData || {};
+  return `
+    <div style="display:flex;flex-direction:column;gap:0.75rem;">
+      ${inputField("Nome","f-nome","text",s.nome||"","Ex: Bradesco Seguros")}
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.5rem;">
+        ${inputField("Valor saída (R$)","f-saida","number",s.valorSaida||"","0,00","step=0.01")}
+        ${inputField("Valor por km (R$)","f-km","number",s.valorKm||"","0,00","step=0.01")}
+      </div>
+      ${inputField("Prazo pagamento (dias)","f-prazo","number",s.prazoDias||"30","30","step=1")}
+      ${btn(s.id?"Salvar":"Adicionar","save-seg","primary",ICONS.check)}
+    </div>`;
+}
+
+function modalMotorista(){
+  const m = state.modalData || {};
+  return `
+    <div style="display:flex;flex-direction:column;gap:0.75rem;">
+      ${inputField("Nome","f-nome","text",m.nome||"","Ex: Carlos Souza")}
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.5rem;">
+        ${inputField("Telefone","f-fone","tel",m.fone||"","(11) 9...")}
+        ${inputField("CNH","f-cnh","text",m.cnh||"","")}
+      </div>
+      ${inputField("Comissão (%)","f-com","number",m.comissao||"","10","step=0.1")}
+      ${btn(m.id?"Salvar":"Adicionar","save-mot","primary",ICONS.check)}
+    </div>`;
+}
+
+function modalDespesa(){
+  return `
+    <div style="display:flex;flex-direction:column;gap:0.75rem;">
+      ${inputField("Descrição","f-desc","text","","Ex: Diesel Posto Shell")}
+      ${selectField("Categoria","f-cat",CATEGORIAS_DESPESA,"")}
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.5rem;">
+        ${inputField("Valor (R$)","f-valor","number","","0,00","step=0.01")}
+        ${inputField("Vencimento","f-data","date",todayISO())}
+      </div>
+      ${btn("Adicionar Despesa","save-desp","primary",ICONS.check)}
+    </div>`;
+}
+
+// ═══════════════════════════════════════════════════
+// ─── EVENTOS ──────────────────────────────────────
+// ═══════════════════════════════════════════════════
+function bindEvents(){
+  // tabs
+  document.querySelectorAll("[data-tab]").forEach(b=>b.addEventListener("click",()=>setState({tab:b.dataset.tab,search:"",filterAtd:"abertos"})));
+  document.querySelectorAll(".sub-cad").forEach(b=>b.addEventListener("click",()=>setState({subTabCadastros:b.dataset.s})));
+  document.querySelectorAll(".filter-atd").forEach(b=>b.addEventListener("click",()=>setState({filterAtd:b.dataset.f})));
+
+  // search
+  const si=document.getElementById("search-input");
+  if (si) si.addEventListener("input",e=>{state.search=e.target.value;render();});
+
+  // modal close
+  const mc=document.getElementById("modal-close");
+  if (mc) mc.addEventListener("click",()=>setState({modal:null,modalData:null}));
+  const mo=document.getElementById("modal-overlay");
+  if (mo) mo.addEventListener("click",e=>{if(e.target===mo)setState({modal:null,modalData:null});});
+
+  // open modais
+  const open = (id,modal,getData)=>{const el=document.getElementById(id);if(el)el.addEventListener("click",()=>setState({modal,modalData:getData?getData():null}));};
+  open("new-atd","atendimento");
+  open("new-gui","guincho");
+  open("new-seg","seguradora");
+  open("new-mot","motorista");
+  open("new-desp","despesa");
+
+  // toggle tipo fatu no modal
+  const ts=document.getElementById("tipo-seg"), ta=document.getElementById("tipo-avu");
+  if (ts) ts.addEventListener("click",()=>setState({modalData:{...(state.modalData||{}),tipoFatu:"Seguradora"}}));
+  if (ta) ta.addEventListener("click",()=>setState({modalData:{...(state.modalData||{}),tipoFatu:"Avulso"}}));
+
+  // editar
+  document.querySelectorAll(".edit-atd, [data-edit-atd]").forEach(b=>b.addEventListener("click",()=>{
+    const id=b.dataset.id||b.dataset.editAtd;
+    const a=state.atendimentos.find(x=>x.id===id);
+    if (a) setState({modal:"atendimento",modalData:{...a}});
+  }));
+  document.querySelectorAll(".edit-gui").forEach(b=>b.addEventListener("click",()=>{
+    const g=state.guinchos.find(x=>x.id===b.dataset.id);
+    if (g) setState({modal:"guincho",modalData:{...g}});
+  }));
+  document.querySelectorAll(".edit-seg").forEach(b=>b.addEventListener("click",()=>{
+    const s=state.seguradoras.find(x=>x.id===b.dataset.id);
+    if (s) setState({modal:"seguradora",modalData:{...s}});
+  }));
+  document.querySelectorAll(".edit-mot").forEach(b=>b.addEventListener("click",()=>{
+    const m=state.motoristas.find(x=>x.id===b.dataset.id);
+    if (m) setState({modal:"motorista",modalData:{...m}});
+  }));
+
+  // avançar status
+  document.querySelectorAll(".next-status").forEach(b=>b.addEventListener("click",()=>{
+    const id=b.dataset.id;
+    const idx=state.atendimentos.findIndex(x=>x.id===id);
+    if (idx<0) return;
+    const a=state.atendimentos[idx];
+    const order=["Solicitado","A Caminho","Guinchando","Finalizado"];
+    const i=order.indexOf(a.status);
+    const next=i>=0&&i<order.length-1?order[i+1]:"Finalizado";
+    const arr=[...state.atendimentos];
+    arr[idx]={...a,status:next};
+    persist("atendimentos",arr);
+    // se finalizou, libera guincho
+    if (next==="Finalizado" && a.guinchoId){
+      const gs=state.guinchos.map(g=>g.id===a.guinchoId?{...g,status:"Livre"}:g);
+      persist("guinchos",gs);
+    }
+    if (next==="A Caminho" && a.guinchoId){
+      const gs=state.guinchos.map(g=>g.id===a.guinchoId?{...g,status:"Em Atendimento"}:g);
+      persist("guinchos",gs);
+    }
+  }));
+
+  // deletar
+  const del = (sel,key,msg)=>document.querySelectorAll(sel).forEach(b=>b.addEventListener("click",()=>{
+    if (!confirm(msg)) return;
+    persist(key, state[key].filter(x=>x.id!==b.dataset.id));
+  }));
+  del(".del-atd","atendimentos","Excluir este atendimento?");
+  del(".del-seg","seguradoras","Excluir esta seguradora?");
+  del(".del-mot","motoristas","Excluir este motorista?");
+  del(".del-desp","despesas","Excluir esta despesa?");
+
+  // toggle pago despesa
+  document.querySelectorAll(".toggle-desp").forEach(b=>b.addEventListener("click",()=>{
+    persist("despesas",state.despesas.map(d=>d.id===b.dataset.id?{...d,pago:!d.pago}:d));
+  }));
+
+  // marcar pago seguradora
+  document.querySelectorAll(".marcar-pago").forEach(b=>b.addEventListener("click",()=>{
+    const seg=b.dataset.seg;
+    if (!confirm("Marcar todos os atendimentos pendentes como pagos?")) return;
+    persist("atendimentos",state.atendimentos.map(a=>{
+      const k=a.seguradoraId||"avulso";
+      if (a.status==="Finalizado"&&!a.pago&&k===seg) return {...a,pago:true};
+      return a;
+    }));
+  }));
+
+  // ver todos (dashboard)
+  const vt=document.querySelector(".ver-todos");
+  if (vt) vt.addEventListener("click",()=>setState({tab:"atendimentos",filterAtd:"abertos"}));
+
+  // ─── SAVES ──────
+  const sa=document.getElementById("save-atd");
+  if (sa) sa.addEventListener("click",()=>{
+    const v=id=>document.getElementById(id)?.value;
+    const obj = {
+      id: state.modalData?.id || uid(),
+      data: v("f-data"), hora: v("f-hora"),
+      clienteNome: v("f-cliente")?.trim(), clienteFone: v("f-fone")?.trim(),
+      veiculoPlaca: v("f-placa")?.trim(), veiculoTipo: v("f-tipoveic"), veiculoModelo: v("f-modelo")?.trim(),
+      origem: v("f-origem")?.trim(), destino: v("f-destino")?.trim(),
+      km: Number(v("f-km"))||0,
+      tipoFatu: state.modalData?.tipoFatu || "Seguradora",
+      seguradoraId: v("f-seg") || "",
+      valor: Number(v("f-valor"))||0,
+      guinchoId: v("f-gui") || "",
+      motoristaId: v("f-mot") || "",
+      status: v("f-status") || "Solicitado",
+      obs: v("f-obs") || "",
+      pago: document.getElementById("f-pago")?.checked || false,
+    };
+    if (!obj.clienteNome) return alert("Preencha o nome do cliente.");
+    const exist = state.atendimentos.findIndex(a=>a.id===obj.id);
+    const arr = exist>=0 ? state.atendimentos.map(a=>a.id===obj.id?obj:a) : [obj,...state.atendimentos];
+    persist("atendimentos",arr);
+    // sincroniza status do guincho se atendimento ativo
+    if (obj.guinchoId && obj.status!=="Finalizado" && obj.status!=="Cancelado"){
+      const gs = state.guinchos.map(g=>g.id===obj.guinchoId?{...g,status:"Em Atendimento"}:g);
+      persist("guinchos",gs);
+    }
+    setState({modal:null,modalData:null});
+  });
+
+  const sg=document.getElementById("save-gui");
+  if (sg) sg.addEventListener("click",()=>{
+    const v=id=>document.getElementById(id)?.value;
+    const obj = {
+      id: state.modalData?.id || uid(),
+      prefixo: v("f-pref")?.trim(), placa: v("f-placa")?.trim(),
+      modelo: v("f-modelo")?.trim(), tipo: v("f-tipo")||"Plataforma",
+      status: v("f-status")||"Livre", km: Number(v("f-km"))||0,
+      obs: v("f-obs")||"",
+    };
+    if (!obj.prefixo) return alert("Preencha o prefixo.");
+    const exist = state.guinchos.findIndex(g=>g.id===obj.id);
+    const arr = exist>=0 ? state.guinchos.map(g=>g.id===obj.id?obj:g) : [...state.guinchos,obj];
+    persist("guinchos",arr);
+    setState({modal:null,modalData:null});
+  });
+
+  const ss=document.getElementById("save-seg");
+  if (ss) ss.addEventListener("click",()=>{
+    const v=id=>document.getElementById(id)?.value;
+    const obj = {
+      id: state.modalData?.id || uid(),
+      nome: v("f-nome")?.trim(),
+      valorSaida: Number(v("f-saida"))||0,
+      valorKm: Number(v("f-km"))||0,
+      prazoDias: Number(v("f-prazo"))||30,
+    };
+    if (!obj.nome) return alert("Preencha o nome.");
+    const exist = state.seguradoras.findIndex(s=>s.id===obj.id);
+    const arr = exist>=0 ? state.seguradoras.map(s=>s.id===obj.id?obj:s) : [...state.seguradoras,obj];
+    persist("seguradoras",arr);
+    setState({modal:null,modalData:null});
+  });
+
+  const sm=document.getElementById("save-mot");
+  if (sm) sm.addEventListener("click",()=>{
+    const v=id=>document.getElementById(id)?.value;
+    const obj = {
+      id: state.modalData?.id || uid(),
+      nome: v("f-nome")?.trim(),
+      fone: v("f-fone")?.trim(), cnh: v("f-cnh")?.trim(),
+      comissao: Number(v("f-com"))||0,
+    };
+    if (!obj.nome) return alert("Preencha o nome.");
+    const exist = state.motoristas.findIndex(m=>m.id===obj.id);
+    const arr = exist>=0 ? state.motoristas.map(m=>m.id===obj.id?obj:m) : [...state.motoristas,obj];
+    persist("motoristas",arr);
+    setState({modal:null,modalData:null});
+  });
+
+  const sd=document.getElementById("save-desp");
+  if (sd) sd.addEventListener("click",()=>{
+    const v=id=>document.getElementById(id)?.value;
+    const obj = {
+      id: uid(),
+      descricao: v("f-desc")?.trim(),
+      categoria: v("f-cat")||"Outras",
+      valor: Number(v("f-valor"))||0,
+      data: v("f-data")||todayISO(),
+      pago: false,
+    };
+    if (!obj.descricao || !obj.valor) return alert("Preencha descrição e valor.");
+    persist("despesas",[obj,...state.despesas]);
+    setState({modal:null,modalData:null});
+  });
+}
+
+// ─── BOOT ─────────────────────────────────────────
+const root = document.createElement("div");
+root.id = "app-root";
+document.getElementById("root").appendChild(root);
+render();
+</script>
+</body>
+</html>
