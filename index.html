@@ -1,0 +1,944 @@
+<!DOCTYPE html>
+
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>JM Transportes – Controle Financeiro</title>
+
+  <!-- Tailwind CSS -->
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/tailwindcss/2.2.19/tailwind.min.js"></script>
+
+  <!-- Recharts + React via CDN -->
+
+  <script crossorigin src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
+
+  <script crossorigin src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/recharts/2.8.0/Recharts.min.js"></script>
+
+  <!-- Lucide Icons -->
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/lucide/0.263.1/lucide.min.js"></script>
+
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body { background: #F5F7FB; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; }
+    input[type=number]::-webkit-inner-spin-button,
+    input[type=number]::-webkit-outer-spin-button { -webkit-appearance: none; }
+    select, input { -webkit-appearance: none; appearance: none; }
+    ::-webkit-scrollbar { width: 6px; }
+    ::-webkit-scrollbar-thumb { background: #CBD5E1; border-radius: 8px; }
+
+    /* Animações */
+    .fade-in { animation: fadeIn 0.25s ease; }
+    @keyframes fadeIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+    .modal-overlay { position: fixed; inset: 0; z-index: 50; display: flex; align-items: flex-end; justify-content: center;
+      background: rgba(15,23,42,0.5); backdrop-filter: blur(4px); }
+    @media (min-width: 640px) { .modal-overlay { align-items: center; padding: 1rem; } }
+    .modal-box { background: #fff; width: 100%; max-width: 32rem; max-height: 90vh; overflow-y: auto;
+      border-radius: 1.5rem 1.5rem 0 0; }
+    @media (min-width: 640px) { .modal-box { border-radius: 1rem; } }
+    .btn { display: inline-flex; align-items: center; justify-content: center; gap: 0.5rem;
+      padding: 0.625rem 1rem; border-radius: 0.75rem; font-weight: 700; font-size: 0.875rem;
+      cursor: pointer; border: none; transition: opacity .15s, transform .1s; }
+    .btn:active { transform: scale(0.96); }
+    .btn:hover { opacity: 0.88; }
+    .badge { display: inline-block; padding: 0.2rem 0.6rem; border-radius: 0.4rem; font-size: 0.7rem; font-weight: 700; }
+    .card { background: #fff; border: 1px solid #E2E8F0; border-radius: 1rem;
+      box-shadow: 0 1px 3px rgba(15,23,42,0.04), 0 4px 12px rgba(15,23,42,0.04); padding: 1.25rem; }
+    .input-field { width: 100%; padding: 0.625rem 0.875rem; border-radius: 0.5rem; font-size: 0.875rem;
+      background: #F1F5F9; border: 1.5px solid transparent; color: #0F172A; outline: none; transition: all .15s; }
+    .input-field:focus { background: #fff; border-color: #1E3A6F; }
+    .label-text { font-size: 0.7rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: #475569; display: block; margin-bottom: 0.375rem; }
+    .progress-bar { height: 0.5rem; border-radius: 9999px; overflow: hidden; background: #F1F5F9; }
+    .progress-fill { height: 100%; border-radius: 9999px; transition: width 0.4s; }
+    .tab-btn { display: flex; flex-direction: column; align-items: center; gap: 0.25rem;
+      padding: 0.5rem 0.25rem; border-radius: 0.75rem; border: none; background: transparent; cursor: pointer;
+      flex: 1; min-width: 0; transition: background .15s; font-size: 0.625rem; font-weight: 700; }
+    .hidden-section { display: none; }
+    .active-section { display: block; }
+  </style>
+
+</head>
+<body>
+
+<div id="root"></div>
+
+<script type="text/babel">
+// ─── Babel não está disponível via CDN nesta versão, usaremos JS puro ───
+</script>
+
+<!-- Vamos usar JS puro com DOM para garantir compatibilidade total sem build -->
+
+<script>
+// ════════════════════════════════════════════════════
+//  JM TRANSPORTES – CONTROLE FINANCEIRO
+//  Arquivo único HTML puro (sem build, sem framework)
+// ════════════════════════════════════════════════════
+
+const C = {
+  bg: "#F5F7FB", card: "#FFFFFF",
+  navy: "#1E3A6F", navyDark: "#142850", navyLight: "#2C5282",
+  ink: "#0F172A", inkSoft: "#475569", inkMute: "#94A3B8",
+  primary: "#FF6B35", green: "#10B981", red: "#EF4444",
+  amber: "#F59E0B", purple: "#8B5CF6", cyan: "#06B6D4",
+  pink: "#EC4899", border: "#E2E8F0", borderSoft: "#F1F5F9",
+};
+
+const CATEGORIAS_RECEITA = [
+  "Frete - Carga Fechada","Frete - Carga Fracionada","Frete - Mudanças",
+  "Locação de Veículo","Outros Serviços","Receita Financeira",
+];
+const CATEGORIAS_DESPESA = [
+  "Combustível","Pedágio","Manutenção","Pneus","Salários Motoristas",
+  "Encargos Sociais","Seguro Veículos","IPVA / Licenciamento",
+  "Aluguel Garagem","Energia / Água","Telefone / Internet",
+  "Marketing","Contabilidade","Impostos","Outras Despesas",
+];
+
+// ─── UTILS ────────────────────────────────────────
+const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2,7);
+const todayISO = () => new Date().toISOString().slice(0,10);
+const isVencido = d => d && d < todayISO();
+const fmtBRL = v => (Number(v)||0).toLocaleString("pt-BR",{style:"currency",currency:"BRL"});
+const fmtCompact = v => {
+  const n = Number(v)||0;
+  if(Math.abs(n)>=1000) return `R$ ${(n/1000).toFixed(1)}k`;
+  return fmtBRL(n);
+};
+const fmtDate = iso => {
+  if(!iso) return "—";
+  const [y,m,d] = iso.split("-");
+  return `${d}/${m}/${y}`;
+};
+
+// ─── STORAGE ───────────────────────────────────────
+const KEYS = { lancamentos:"jm:lanc", boletos:"jm:bol", notas:"jm:nota", dividas:"jm:div" };
+const load = k => { try{ return JSON.parse(localStorage.getItem(k)||"[]"); }catch(e){ return []; } };
+const save = (k,v) => { try{ localStorage.setItem(k,JSON.stringify(v)); }catch(e){} };
+
+// ─── ESTADO GLOBAL ────────────────────────────────
+const state = {
+  tab: "dashboard",
+  lancamentos: load(KEYS.lancamentos),
+  boletos: load(KEYS.boletos),
+  notas: load(KEYS.notas),
+  dividas: load(KEYS.dividas),
+  modal: null, // 'lancamento' | 'boleto' | 'nota' | 'divida'
+  search: "",
+};
+
+function setState(patch) {
+  Object.assign(state, patch);
+  render();
+}
+function persist(key, arr) {
+  save(KEYS[key], arr);
+  setState({ [key]: arr });
+}
+
+// ─── RENDER PRINCIPAL ─────────────────────────────
+function render() {
+  document.getElementById("app-root").innerHTML = buildApp();
+  bindEvents();
+  renderCharts();
+}
+
+// ─── TEMPLATE HELPERS ─────────────────────────────
+function card(content, accentColor="", extraClass="", style="") {
+  const borderTop = accentColor ? `border-top: 3px solid ${accentColor};` : "";
+  return `<div class="card ${extraClass}" style="${borderTop}${style}">${content}</div>`;
+}
+function badge(text, color) {
+  return `<span class="badge" style="background:${color}18;color:${color}">${text}</span>`;
+}
+function btn(text, id, variant="primary", iconSvg="", extraClass="") {
+  const styles = {
+    primary: `background:${C.navy};color:#fff;`,
+    accent: `background:${C.primary};color:#fff;`,
+    success: `background:${C.green};color:#fff;`,
+    danger: `background:${C.red};color:#fff;`,
+    ghost: `background:${C.borderSoft};color:${C.ink};border:1px solid ${C.border};`,
+  };
+  return `<button class="btn ${extraClass}" id="${id}" style="${styles[variant]||styles.primary}">${iconSvg}${text}</button>`;
+}
+function inputField(label, id, type="text", value="", placeholder="", extraAttr="") {
+  return `<label class="block"><span class="label-text">${label}</span>
+    <input class="input-field" id="${id}" type="${type}" value="${escHtml(value)}" placeholder="${placeholder}" ${extraAttr} /></label>`;
+}
+function selectField(label, id, options, selected="") {
+  const opts = options.map(o => `<option value="${o}" ${o===selected?"selected":""}>${o}</option>`).join("");
+  return `<label class="block"><span class="label-text">${label}</span>
+    <select class="input-field" id="${id}"><option value="">Selecione...</option>${opts}</select></label>`;
+}
+function escHtml(s) { return String(s||"").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;"); }
+
+// ─── SVG ICONS (inline) ───────────────────────────
+const ICONS = {
+  barChart: `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="12" width="4" height="9"/><rect x="10" y="6" width="4" height="15"/><rect x="17" y="3" width="4" height="18"/></svg>`,
+  wallet: `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12V7H5a2 2 0 0 1 0-4h14v4"/><path d="M3 5v14a2 2 0 0 0 2 2h16v-5"/><path d="M18 12a2 2 0 0 0 0 4h4v-4z"/></svg>`,
+  receipt: `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 3 5 3 5 21 7 21 7 3 21 3 21 21 19 21 19 3"/><line x1="9" y1="9" x2="15" y2="9"/><line x1="9" y1="13" x2="15" y2="13"/></svg>`,
+  file: `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>`,
+  alert: `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>`,
+  plus: `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>`,
+  trash: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>`,
+  check: `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>`,
+  x: `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>`,
+  truck: `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="1" y="3" width="15" height="13"/><polygon points="16 8 20 8 23 11 23 16 16 16 16 8"/><circle cx="5.5" cy="18.5" r="2.5"/><circle cx="18.5" cy="18.5" r="2.5"/></svg>`,
+  upArrow: `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="16 12 12 8 8 12"/><line x1="12" y1="16" x2="12" y2="8"/></svg>`,
+  downArrow: `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="8 12 12 16 16 12"/><line x1="12" y1="8" x2="12" y2="16"/></svg>`,
+  trendUp: `<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/><polyline points="17 6 23 6 23 12"/></svg>`,
+  trendDown: `<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 18 13.5 8.5 8.5 13.5 1 6"/><polyline points="17 18 23 18 23 12"/></svg>`,
+  search: `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>`,
+  calendar: `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>`,
+  creditCard: `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="1" y="4" width="22" height="16" rx="2" ry="2"/><line x1="1" y1="10" x2="23" y2="10"/></svg>`,
+  piggy: `<svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 5c-1.5 0-2.8 1.4-3 2-3.5-1.5-11-.3-11 5 0 1.8 0 3 2 4.5V20h4v-2h3v2h4v-4c1-.5 1.7-1 2-2h2v-4h-2c0-1-.5-1.5-1-2z"/><path d="M2 9v1a2 2 0 0 0 2 2h1"/><path d="M16 11h0"/></svg>`,
+};
+
+// ─── APP STRUCTURE ────────────────────────────────
+function buildApp() {
+  return `
+  <div style="min-height:100vh;background:${C.bg}">
+    ${buildHeader()}
+    <main style="max-width:900px;margin:0 auto;padding:1.25rem 1rem 7rem;">
+      ${state.tab==="dashboard" ? buildDashboard() : ""}
+      ${state.tab==="lancamentos" ? buildLancamentos() : ""}
+      ${state.tab==="boletos" ? buildBoletos() : ""}
+      ${state.tab==="notas" ? buildNotas() : ""}
+      ${state.tab==="dividas" ? buildDividas() : ""}
+    </main>
+    ${buildBottomNav()}
+    ${state.modal ? buildModal() : ""}
+  </div>`;
+}
+
+// ─── HEADER ───────────────────────────────────────
+function buildHeader() {
+  return `
+  <header style="position:sticky;top:0;z-index:40;background:linear-gradient(135deg,${C.navy} 0%,${C.navyDark} 100%);box-shadow:0 4px 16px rgba(30,58,111,0.2);padding:0.75rem 1rem;">
+    <div style="max-width:900px;margin:0 auto;display:flex;align-items:center;gap:0.75rem;">
+      <div style="width:44px;height:44px;background:linear-gradient(135deg,${C.navy} 0%,${C.navyDark} 100%);border:2px solid rgba(255,255,255,0.25);border-radius:0.75rem;display:flex;align-items:center;justify-content:center;flex-shrink:0;box-shadow:0 2px 8px rgba(30,58,111,0.4);">
+        <span style="color:#fff;font-weight:800;font-size:17px;font-family:Georgia,serif;letter-spacing:-1px;">JM</span>
+      </div>
+      <div style="flex:1;">
+        <div style="color:#fff;font-weight:800;font-size:1.1rem;font-family:Georgia,serif;letter-spacing:-0.03em;">JM Transportes</div>
+        <div style="color:#B8C5DB;font-size:0.7rem;font-weight:600;">Controle Financeiro</div>
+      </div>
+      <div style="display:flex;align-items:center;gap:0.5rem;padding:0.375rem 0.75rem;background:rgba(255,255,255,0.12);border-radius:0.625rem;">
+        <span style="color:${C.primary};">${ICONS.truck}</span>
+        <span style="color:#fff;font-size:0.7rem;font-weight:700;">Online</span>
+      </div>
+    </div>
+  </header>`;
+}
+
+// ─── BOTTOM NAV ───────────────────────────────────
+function buildBottomNav() {
+  const tabs = [
+    { id:"dashboard", label:"Painel", icon: ICONS.barChart },
+    { id:"lancamentos", label:"Lançamentos", icon: ICONS.wallet },
+    { id:"boletos", label:"A Pagar", icon: ICONS.receipt },
+    { id:"notas", label:"A Receber", icon: ICONS.file },
+    { id:"dividas", label:"Dívidas", icon: ICONS.alert },
+  ];
+  const items = tabs.map(t => `
+    <button class="tab-btn" data-tab="${t.id}"
+      style="color:${state.tab===t.id?C.navy:C.inkMute};background:${state.tab===t.id?C.navy+"12":"transparent"}">
+      <span style="color:${state.tab===t.id?C.navy:C.inkMute}">${t.icon}</span>
+      <span style="font-size:0.6rem">${t.label}</span>
+    </button>`).join("");
+  return `
+  <nav style="position:fixed;bottom:0;left:0;right:0;z-index:40;background:${C.card};border-top:1px solid ${C.border};box-shadow:0 -4px 16px rgba(15,23,42,0.06);padding:0.5rem 0.5rem max(0.5rem,env(safe-area-inset-bottom));">
+    <div style="max-width:900px;margin:0 auto;display:flex;justify-content:space-around;">${items}</div>
+  </nav>`;
+}
+
+// ─── DASHBOARD ────────────────────────────────────
+function buildDashboard() {
+  const mes = todayISO().slice(0,7);
+  const recMes = state.lancamentos.filter(l=>l.tipo==="Receita"&&l.data?.startsWith(mes)).reduce((s,l)=>s+Number(l.valor),0);
+  const despMes = state.lancamentos.filter(l=>l.tipo==="Despesa"&&l.data?.startsWith(mes)).reduce((s,l)=>s+Number(l.valor),0);
+  const resultado = recMes - despMes;
+  const aReceber = state.notas.filter(n=>n.status!=="Recebido").reduce((s,n)=>s+Number(n.valor),0);
+  const aPagar = state.boletos.filter(b=>b.status!=="Pago").reduce((s,b)=>s+Number(b.valor),0);
+  const dividaTotal = state.dividas.filter(d=>d.status==="Ativo").reduce((s,d)=>s+Number(d.saldo),0);
+  const vencidos = state.boletos.filter(b=>b.status!=="Pago"&&isVencido(b.vencimento)).length
+                 + state.notas.filter(n=>n.status!=="Recebido"&&isVencido(n.vencimento)).length;
+
+  return `
+  <div class="fade-in" style="display:flex;flex-direction:column;gap:1rem;">
+
+    <!-- HERO -->
+    <div style="background:linear-gradient(135deg,${C.navy} 0%,${C.navyDark} 100%);border-radius:1rem;padding:1.25rem;border:none;box-shadow:0 4px 20px rgba(30,58,111,0.18);">
+      <div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:1rem;">
+        <div>
+          <div style="color:#B8C5DB;font-size:0.65rem;font-weight:700;text-transform:uppercase;letter-spacing:0.1em;">Resultado do mês</div>
+          <div style="color:#fff;font-size:2rem;font-weight:800;letter-spacing:-0.03em;margin-top:0.25rem;">${fmtBRL(resultado)}</div>
+        </div>
+        <div style="padding:0.625rem;border-radius:0.75rem;background:${resultado>=0?C.green+"30":C.red+"30"}">
+          <span style="color:${resultado>=0?C.green:C.red}">${resultado>=0?ICONS.trendUp:ICONS.trendDown}</span>
+        </div>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.75rem;">
+        <div style="padding:0.75rem;border-radius:0.75rem;background:rgba(255,255,255,0.1);">
+          <div style="display:flex;align-items:center;gap:0.375rem;margin-bottom:0.25rem;">
+            <span style="color:${C.green}">${ICONS.upArrow}</span>
+            <span style="color:#B8C5DB;font-size:0.6rem;font-weight:700;text-transform:uppercase;">Receitas</span>
+          </div>
+          <div style="color:#fff;font-weight:800;font-size:1.1rem;">${fmtCompact(recMes)}</div>
+        </div>
+        <div style="padding:0.75rem;border-radius:0.75rem;background:rgba(255,255,255,0.1);">
+          <div style="display:flex;align-items:center;gap:0.375rem;margin-bottom:0.25rem;">
+            <span style="color:${C.red}">${ICONS.downArrow}</span>
+            <span style="color:#B8C5DB;font-size:0.6rem;font-weight:700;text-transform:uppercase;">Despesas</span>
+          </div>
+          <div style="color:#fff;font-weight:800;font-size:1.1rem;">${fmtCompact(despMes)}</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- KPIs -->
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.75rem;">
+      ${kpiMini("A Receber", fmtCompact(aReceber), C.green, ICONS.file)}
+      ${kpiMini("A Pagar", fmtCompact(aPagar), C.amber, ICONS.receipt)}
+      ${kpiMini("Dívida Ativa", fmtCompact(dividaTotal), C.red, ICONS.alert)}
+      ${kpiMini("Vencidos", vencidos.toString(), C.purple, ICONS.x)}
+    </div>
+
+    <!-- CHART BARRAS -->
+    <div class="card" style="border-top:3px solid ${C.primary}">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.75rem;">
+        <span style="font-weight:700;font-size:0.95rem;color:${C.ink}">Receitas × Despesas</span>
+        <span style="font-size:0.7rem;color:${C.inkMute}">Últimos 6 meses</span>
+      </div>
+      <canvas id="chartBarras" height="180"></canvas>
+    </div>
+
+    <!-- CHART PIZZA -->
+    <div class="card" style="border-top:3px solid ${C.purple}">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.75rem;">
+        <span style="font-weight:700;font-size:0.95rem;color:${C.ink}">Despesas por Categoria</span>
+        <span style="font-size:0.7rem;color:${C.inkMute}">Mês atual</span>
+      </div>
+      <canvas id="chartPizza" height="200"></canvas>
+      <div id="legendPizza" style="margin-top:0.75rem;display:flex;flex-direction:column;gap:0.375rem;"></div>
+    </div>
+
+  </div>`;
+}
+
+function kpiMini(label, value, color, icon) {
+  return `
+  <div class="card" style="border-top:3px solid ${color};padding:1rem;">
+    <div style="padding:0.5rem;border-radius:0.625rem;background:${color}15;width:fit-content;margin-bottom:0.5rem;">
+      <span style="color:${color}">${icon}</span>
+    </div>
+    <div style="font-size:0.65rem;font-weight:700;text-transform:uppercase;letter-spacing:0.05em;color:${C.inkMute};">${label}</div>
+    <div style="font-weight:800;font-size:1.15rem;color:${C.ink};letter-spacing:-0.02em;">${value}</div>
+  </div>`;
+}
+
+// ─── RENDER CHARTS (Canvas) ────────────────────────
+function renderCharts() {
+  if(state.tab !== "dashboard") return;
+  setTimeout(() => {
+    renderBarChart();
+    renderPieChart();
+  }, 50);
+}
+
+function getChartData() {
+  const now = new Date();
+  const months = [];
+  for(let i=5;i>=0;i--) {
+    const d = new Date(now.getFullYear(), now.getMonth()-i, 1);
+    const key = d.toISOString().slice(0,7);
+    const label = d.toLocaleDateString("pt-BR",{month:"short"});
+    const rec = state.lancamentos.filter(l=>l.tipo==="Receita"&&l.data?.startsWith(key)).reduce((s,l)=>s+Number(l.valor),0);
+    const desp = state.lancamentos.filter(l=>l.tipo==="Despesa"&&l.data?.startsWith(key)).reduce((s,l)=>s+Number(l.valor),0);
+    months.push({label,rec,desp});
+  }
+  return months;
+}
+
+function renderBarChart() {
+  const canvas = document.getElementById("chartBarras");
+  if(!canvas) return;
+  const ctx = canvas.getContext("2d");
+  const data = getChartData();
+  const W = canvas.offsetWidth; canvas.width = W; canvas.height = 180;
+  const pad = {l:55,r:10,t:10,b:30};
+  const cw = W-pad.l-pad.r, ch = 180-pad.t-pad.b;
+  const maxVal = Math.max(...data.map(d=>Math.max(d.rec,d.desp)),1);
+  ctx.clearRect(0,0,W,180);
+  // grid
+  ctx.strokeStyle="#E2E8F0"; ctx.lineWidth=1;
+  for(let i=0;i<=4;i++){
+    const y = pad.t + ch*(1-i/4);
+    ctx.beginPath(); ctx.moveTo(pad.l,y); ctx.lineTo(W-pad.r,y); ctx.stroke();
+    ctx.fillStyle=C.inkMute; ctx.font="10px sans-serif"; ctx.textAlign="right";
+    const v = maxVal*i/4;
+    ctx.fillText(v>=1000?`${(v/1000).toFixed(0)}k`:v.toFixed(0), pad.l-4, y+3);
+  }
+  // bars
+  const bw = (cw/(data.length*2+data.length*0.4))*0.8;
+  const gap = bw*0.5;
+  data.forEach((d,i) => {
+    const gx = pad.l + i*(cw/data.length);
+    const bx = gx + (cw/data.length-2*bw-gap)/2;
+    // rec
+    const rh = (d.rec/maxVal)*ch;
+    ctx.fillStyle=C.green;
+    ctx.beginPath(); ctx.roundRect(bx, pad.t+ch-rh, bw, rh, [4,4,0,0]); ctx.fill();
+    // desp
+    const dh = (d.desp/maxVal)*ch;
+    ctx.fillStyle=C.red;
+    ctx.beginPath(); ctx.roundRect(bx+bw+gap, pad.t+ch-dh, bw, dh, [4,4,0,0]); ctx.fill();
+    // label
+    ctx.fillStyle=C.inkSoft; ctx.font="10px sans-serif"; ctx.textAlign="center";
+    ctx.fillText(d.label, gx+(cw/data.length)/2, pad.t+ch+16);
+  });
+  // legenda
+  ctx.fillStyle=C.green; ctx.fillRect(pad.l,5,10,8);
+  ctx.fillStyle=C.ink; ctx.font="10px sans-serif"; ctx.textAlign="left"; ctx.fillText("Receitas",pad.l+13,12);
+  ctx.fillStyle=C.red; ctx.fillRect(pad.l+75,5,10,8);
+  ctx.fillStyle=C.ink; ctx.fillText("Despesas",pad.l+88,12);
+}
+
+function renderPieChart() {
+  const canvas = document.getElementById("chartPizza");
+  if(!canvas) return;
+  const mes = todayISO().slice(0,7);
+  const m = {};
+  state.lancamentos.filter(l=>l.tipo==="Despesa"&&l.data?.startsWith(mes)).forEach(l=>{
+    m[l.categoria]=(m[l.categoria]||0)+Number(l.valor);
+  });
+  const entries = Object.entries(m).sort((a,b)=>b[1]-a[1]).slice(0,6);
+  const legend = document.getElementById("legendPizza");
+  if(entries.length===0){
+    canvas.style.display="none";
+    if(legend) legend.innerHTML=`<div style="text-align:center;padding:2rem;color:${C.inkMute};font-size:0.85rem;">Sem despesas no mês atual</div>`;
+    return;
+  }
+  canvas.style.display="block";
+  const COLORS=[C.navy,C.primary,C.green,C.purple,C.cyan,C.amber];
+  const W=canvas.offsetWidth; canvas.width=W; canvas.height=200;
+  const cx=W/2, cy=100, r=75, ri=40;
+  const total=entries.reduce((s,e)=>s+e[1],0);
+  let angle=-Math.PI/2;
+  const ctx=canvas.getContext("2d");
+  ctx.clearRect(0,0,W,200);
+  entries.forEach(([,v],i)=>{
+    const slice=(v/total)*Math.PI*2;
+    ctx.beginPath(); ctx.moveTo(cx,cy); ctx.arc(cx,cy,r,angle,angle+slice); ctx.closePath();
+    ctx.fillStyle=COLORS[i%COLORS.length]; ctx.fill();
+    ctx.strokeStyle="#fff"; ctx.lineWidth=2; ctx.stroke();
+    angle+=slice;
+  });
+  // donut hole
+  ctx.beginPath(); ctx.arc(cx,cy,ri,0,Math.PI*2); ctx.fillStyle="#fff"; ctx.fill();
+  // center text
+  ctx.fillStyle=C.ink; ctx.font="bold 11px sans-serif"; ctx.textAlign="center"; ctx.fillText("Despesas",cx,cy-2);
+  ctx.fillStyle=C.inkSoft; ctx.font="10px sans-serif"; ctx.fillText("mês atual",cx,cy+11);
+
+  if(legend) {
+    legend.innerHTML = entries.map(([name,v],i)=>`
+      <div style="display:flex;align-items:center;justify-content:space-between;font-size:0.78rem;">
+        <div style="display:flex;align-items:center;gap:0.5rem;">
+          <div style="width:10px;height:10px;border-radius:2px;background:${COLORS[i%COLORS.length]};flex-shrink:0;"></div>
+          <span style="color:${C.ink};font-weight:500;">${name}</span>
+        </div>
+        <span style="color:${C.inkSoft};font-weight:700;">${fmtCompact(v)}</span>
+      </div>`).join("");
+  }
+}
+
+// ─── LANÇAMENTOS ──────────────────────────────────
+function buildLancamentos() {
+  const totalRec=state.lancamentos.filter(l=>l.tipo==="Receita").reduce((s,l)=>s+Number(l.valor),0);
+  const totalDesp=state.lancamentos.filter(l=>l.tipo==="Despesa").reduce((s,l)=>s+Number(l.valor),0);
+  const filtered=state.lancamentos.filter(l=>
+    l.descricao?.toLowerCase().includes(state.search.toLowerCase())||
+    l.categoria?.toLowerCase().includes(state.search.toLowerCase())
+  );
+  const items = filtered.length===0
+    ? `<div class="card">${buildEmpty(ICONS.wallet,"Nenhum lançamento","Toque em 'Novo' para começar")}</div>`
+    : filtered.map(l=>`
+      <div class="card fade-in" style="padding:1rem;">
+        <div style="display:flex;align-items:flex-start;gap:0.75rem;">
+          <div style="padding:0.5rem;border-radius:0.625rem;background:${l.tipo==="Receita"?C.green+"15":C.red+"15"};flex-shrink:0;">
+            <span style="color:${l.tipo==="Receita"?C.green:C.red}">${l.tipo==="Receita"?ICONS.upArrow:ICONS.downArrow}</span>
+          </div>
+          <div style="flex:1;min-width:0;">
+            <div style="font-weight:700;font-size:0.875rem;color:${C.ink};">${escHtml(l.descricao)}</div>
+            <div style="display:flex;gap:0.5rem;align-items:center;margin-top:0.25rem;flex-wrap:wrap;">
+              ${badge(l.categoria,C.navy)}
+              <span style="font-size:0.7rem;color:${C.inkMute}">${ICONS.calendar} ${fmtDate(l.data)}</span>
+            </div>
+          </div>
+          <div style="display:flex;align-items:center;gap:0.5rem;flex-shrink:0;">
+            <span style="font-weight:700;font-size:0.85rem;color:${l.tipo==="Receita"?C.green:C.red}">
+              ${l.tipo==="Receita"?"+":"-"} ${fmtCompact(l.valor)}
+            </span>
+            <button class="btn del-btn" data-id="${l.id}" data-mod="lancamentos" style="padding:0.375rem;background:${C.borderSoft};color:${C.red}">${ICONS.trash}</button>
+          </div>
+        </div>
+      </div>`).join("");
+
+  return `
+  <div class="fade-in" style="display:flex;flex-direction:column;gap:1rem;">
+    <div style="display:flex;align-items:center;justify-content:space-between;">
+      <div>
+        <div style="font-weight:800;font-size:1.5rem;color:${C.ink};letter-spacing:-0.02em;">Lançamentos</div>
+        <div style="font-size:0.8rem;color:${C.inkSoft};">${state.lancamentos.length} registro${state.lancamentos.length!==1?"s":""}</div>
+      </div>
+      ${btn("Novo","modal-lancamento","accent",ICONS.plus)}
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.75rem;">
+      <div class="card" style="border-top:3px solid ${C.green};padding:1rem;">
+        <div style="font-size:0.65rem;font-weight:700;text-transform:uppercase;color:${C.inkMute};">Total Receitas</div>
+        <div style="font-weight:800;font-size:1.2rem;color:${C.green};margin-top:0.25rem;">${fmtCompact(totalRec)}</div>
+      </div>
+      <div class="card" style="border-top:3px solid ${C.red};padding:1rem;">
+        <div style="font-size:0.65rem;font-weight:700;text-transform:uppercase;color:${C.inkMute};">Total Despesas</div>
+        <div style="font-weight:800;font-size:1.2rem;color:${C.red};margin-top:0.25rem;">${fmtCompact(totalDesp)}</div>
+      </div>
+    </div>
+    <div style="position:relative;">
+      <span style="position:absolute;left:0.75rem;top:50%;transform:translateY(-50%);color:${C.inkMute}">${ICONS.search}</span>
+      <input id="search-input" class="input-field" placeholder="Buscar lançamento..." value="${escHtml(state.search)}" style="padding-left:2.25rem;background:${C.card};border:1px solid ${C.border};" />
+    </div>
+    ${items}
+  </div>`;
+}
+
+// ─── BOLETOS ──────────────────────────────────────
+function buildBoletos() {
+  const aPagar=state.boletos.filter(b=>b.status!=="Pago").reduce((s,b)=>s+Number(b.valor),0);
+  const vencidos=state.boletos.filter(b=>b.status!=="Pago"&&isVencido(b.vencimento));
+  const valorVenc=vencidos.reduce((s,b)=>s+Number(b.valor),0);
+  const sorted=[...state.boletos].sort((a,b)=>{
+    if(a.status==="Pago"&&b.status!=="Pago") return 1;
+    if(b.status==="Pago"&&a.status!=="Pago") return -1;
+    return (a.vencimento||"").localeCompare(b.vencimento||"");
+  });
+
+  const items = sorted.length===0
+    ? `<div class="card">${buildEmpty(ICONS.receipt,"Nenhum boleto","Cadastre boletos para acompanhar vencimentos")}</div>`
+    : sorted.map(b=>{
+        const venc=isVencido(b.vencimento)&&b.status!=="Pago";
+        const ic=b.status==="Pago"?ICONS.check:(venc?ICONS.alert:ICONS.receipt);
+        const col=b.status==="Pago"?C.green:(venc?C.red:C.amber);
+        return `
+        <div class="card fade-in" style="padding:1rem;">
+          <div style="display:flex;align-items:flex-start;gap:0.75rem;">
+            <button class="btn toggle-btn" data-id="${b.id}" data-mod="boletos" style="padding:0.5rem;background:${col}15;color:${col};flex-shrink:0;">${ic}</button>
+            <div style="flex:1;min-width:0;">
+              <div style="font-weight:700;font-size:0.875rem;color:${C.ink};${b.status==="Pago"?"text-decoration:line-through;opacity:0.6":""}">${escHtml(b.fornecedor)}</div>
+              <div style="display:flex;gap:0.5rem;align-items:center;margin-top:0.25rem;flex-wrap:wrap;">
+                ${b.categoria?badge(b.categoria,C.navy):""}
+                ${badge(b.status==="Pago"?"Pago":(venc?"VENCIDO":"A Pagar"),col)}
+                <span style="font-size:0.7rem;color:${C.inkMute}">${ICONS.calendar} ${fmtDate(b.vencimento)}</span>
+              </div>
+            </div>
+            <div style="display:flex;flex-direction:column;align-items:flex-end;gap:0.375rem;flex-shrink:0;">
+              <span style="font-weight:700;font-size:0.85rem;color:${C.ink}">${fmtCompact(b.valor)}</span>
+              <button class="btn del-btn" data-id="${b.id}" data-mod="boletos" style="padding:0.375rem;background:${C.borderSoft};color:${C.red}">${ICONS.trash}</button>
+            </div>
+          </div>
+        </div>`; }).join("");
+
+  return `
+  <div class="fade-in" style="display:flex;flex-direction:column;gap:1rem;">
+    <div style="display:flex;align-items:center;justify-content:space-between;">
+      <div>
+        <div style="font-weight:800;font-size:1.5rem;color:${C.ink};letter-spacing:-0.02em;">A Pagar</div>
+        <div style="font-size:0.8rem;color:${C.inkSoft}">${state.boletos.filter(b=>b.status!=="Pago").length} aberto(s)</div>
+      </div>
+      ${btn("Novo","modal-boleto","accent",ICONS.plus)}
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.75rem;">
+      <div class="card" style="border-top:3px solid ${C.amber};padding:1rem;">
+        <div style="font-size:0.65rem;font-weight:700;text-transform:uppercase;color:${C.inkMute};">Total a Pagar</div>
+        <div style="font-weight:800;font-size:1.2rem;color:${C.amber};margin-top:0.25rem;">${fmtCompact(aPagar)}</div>
+      </div>
+      <div class="card" style="border-top:3px solid ${C.red};padding:1rem;">
+        <div style="font-size:0.65rem;font-weight:700;text-transform:uppercase;color:${C.inkMute};">Vencidos (${vencidos.length})</div>
+        <div style="font-weight:800;font-size:1.2rem;color:${C.red};margin-top:0.25rem;">${fmtCompact(valorVenc)}</div>
+      </div>
+    </div>
+    ${items}
+  </div>`;
+}
+
+// ─── NOTAS ────────────────────────────────────────
+function buildNotas() {
+  const aReceber=state.notas.filter(n=>n.status!=="Recebido").reduce((s,n)=>s+Number(n.valor),0);
+  const recebido=state.notas.filter(n=>n.status==="Recebido").reduce((s,n)=>s+Number(n.valor),0);
+  const vencidos=state.notas.filter(n=>n.status!=="Recebido"&&isVencido(n.vencimento));
+  const sorted=[...state.notas].sort((a,b)=>{
+    if(a.status==="Recebido"&&b.status!=="Recebido") return 1;
+    if(b.status==="Recebido"&&a.status!=="Recebido") return -1;
+    return (a.vencimento||"").localeCompare(b.vencimento||"");
+  });
+
+  const items = sorted.length===0
+    ? `<div class="card">${buildEmpty(ICONS.file,"Nenhuma nota","Cadastre notas fiscais a receber")}</div>`
+    : sorted.map(n=>{
+        const venc=isVencido(n.vencimento)&&n.status!=="Recebido";
+        const col=n.status==="Recebido"?C.green:(venc?C.red:C.cyan);
+        return `
+        <div class="card fade-in" style="padding:1rem;">
+          <div style="display:flex;align-items:flex-start;gap:0.75rem;">
+            <button class="btn toggle-btn" data-id="${n.id}" data-mod="notas" style="padding:0.5rem;background:${col}15;color:${col};flex-shrink:0;">
+              ${n.status==="Recebido"?ICONS.check:(venc?ICONS.alert:ICONS.file)}
+            </button>
+            <div style="flex:1;min-width:0;">
+              <div style="font-weight:700;font-size:0.875rem;color:${C.ink};${n.status==="Recebido"?"text-decoration:line-through;opacity:0.6":""}">${escHtml(n.cliente)}</div>
+              <div style="display:flex;gap:0.5rem;align-items:center;margin-top:0.25rem;flex-wrap:wrap;">
+                ${n.numNota?badge("NF "+n.numNota,C.navy):""}
+                ${badge(n.status==="Recebido"?"Recebido":(venc?"VENCIDO":"A Receber"),col)}
+                <span style="font-size:0.7rem;color:${C.inkMute}">${ICONS.calendar} ${fmtDate(n.vencimento)}</span>
+              </div>
+            </div>
+            <div style="display:flex;flex-direction:column;align-items:flex-end;gap:0.375rem;flex-shrink:0;">
+              <span style="font-weight:700;font-size:0.85rem;color:${C.ink}">${fmtCompact(n.valor)}</span>
+              <button class="btn del-btn" data-id="${n.id}" data-mod="notas" style="padding:0.375rem;background:${C.borderSoft};color:${C.red}">${ICONS.trash}</button>
+            </div>
+          </div>
+        </div>`; }).join("");
+
+  return `
+  <div class="fade-in" style="display:flex;flex-direction:column;gap:1rem;">
+    <div style="display:flex;align-items:center;justify-content:space-between;">
+      <div>
+        <div style="font-weight:800;font-size:1.5rem;color:${C.ink};letter-spacing:-0.02em;">A Receber</div>
+        <div style="font-size:0.8rem;color:${C.inkSoft}">${state.notas.filter(n=>n.status!=="Recebido").length} aberto(s)</div>
+      </div>
+      ${btn("Nova","modal-nota","accent",ICONS.plus)}
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.75rem;">
+      <div class="card" style="border-top:3px solid ${C.green};padding:1rem;">
+        <div style="font-size:0.65rem;font-weight:700;text-transform:uppercase;color:${C.inkMute};">A Receber</div>
+        <div style="font-weight:800;font-size:1.2rem;color:${C.green};margin-top:0.25rem;">${fmtCompact(aReceber)}</div>
+      </div>
+      <div class="card" style="border-top:3px solid ${C.cyan};padding:1rem;">
+        <div style="font-size:0.65rem;font-weight:700;text-transform:uppercase;color:${C.inkMute};">Já Recebido</div>
+        <div style="font-weight:800;font-size:1.2rem;color:${C.cyan};margin-top:0.25rem;">${fmtCompact(recebido)}</div>
+      </div>
+    </div>
+    ${vencidos.length>0?`<div class="card" style="border-top:3px solid ${C.red};padding:0.75rem 1rem;">
+      <div style="display:flex;align-items:center;gap:0.5rem;color:${C.red};font-weight:700;font-size:0.875rem;">
+        ${ICONS.alert} ${vencidos.length} título(s) em atraso
+      </div></div>`:""}
+    ${items}
+  </div>`;
+}
+
+// ─── DÍVIDAS ──────────────────────────────────────
+function buildDividas() {
+  const dividaTotal=state.dividas.filter(d=>d.status==="Ativo").reduce((s,d)=>s+Number(d.saldo),0);
+  const comprMensal=state.dividas.filter(d=>d.status==="Ativo").reduce((s,d)=>s+Number(d.valorParcela),0);
+
+  const items = state.dividas.length===0
+    ? `<div class="card">${buildEmpty(ICONS.alert,"Sem dívidas cadastradas","Adicione empréstimos e financiamentos")}</div>`
+    : state.dividas.map(d=>{
+        const prog = d.parcelaTotal>0?(d.parcelaPaga/d.parcelaTotal)*100:0;
+        return `
+        <div class="card fade-in" style="padding:1rem;border-top:3px solid ${d.status==="Quitado"?C.green:C.purple}">
+          <div style="display:flex;align-items:flex-start;gap:0.75rem;margin-bottom:0.75rem;">
+            <div style="padding:0.5rem;border-radius:0.625rem;background:${C.purple}15;flex-shrink:0;">
+              <span style="color:${C.purple}">${ICONS.creditCard}</span>
+            </div>
+            <div style="flex:1;min-width:0;">
+              <div style="font-weight:700;font-size:0.875rem;color:${C.ink}">${escHtml(d.credor)}</div>
+              <div style="display:flex;gap:0.5rem;align-items:center;margin-top:0.25rem;flex-wrap:wrap;">
+                ${badge(d.tipo,C.navy)}
+                ${badge(d.status,d.status==="Quitado"?C.green:C.amber)}
+              </div>
+            </div>
+            <button class="btn del-btn" data-id="${d.id}" data-mod="dividas" style="padding:0.375rem;background:${C.borderSoft};color:${C.red};flex-shrink:0;">${ICONS.trash}</button>
+          </div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.75rem;margin-bottom:0.75rem;">
+            <div>
+              <div style="font-size:0.65rem;font-weight:700;text-transform:uppercase;color:${C.inkMute};">Saldo Devedor</div>
+              <div style="font-weight:700;color:${C.red}">${fmtCompact(d.saldo)}</div>
+            </div>
+            <div>
+              <div style="font-size:0.65rem;font-weight:700;text-transform:uppercase;color:${C.inkMute};">Parcela</div>
+              <div style="font-weight:700;color:${C.ink}">${fmtCompact(d.valorParcela)}</div>
+            </div>
+          </div>
+          ${d.parcelaTotal>0?`
+          <div style="margin-bottom:0.75rem;">
+            <div style="display:flex;justify-content:space-between;margin-bottom:0.375rem;">
+              <span style="font-size:0.75rem;color:${C.inkSoft};font-weight:600;">${d.parcelaPaga} de ${d.parcelaTotal} parcelas</span>
+              <span style="font-size:0.75rem;color:${C.purple};font-weight:700;">${prog.toFixed(0)}%</span>
+            </div>
+            <div class="progress-bar"><div class="progress-fill" style="width:${prog}%;background:linear-gradient(90deg,${C.purple},${C.pink})"></div></div>
+          </div>`:""}
+          ${d.status==="Ativo"?`<button class="btn parcela-btn" data-id="${d.id}" style="width:100%;background:${C.green};color:#fff;font-size:0.8rem;padding:0.5rem;">${ICONS.check} Marcar parcela paga</button>`:""}
+        </div>`; }).join("");
+
+  return `
+  <div class="fade-in" style="display:flex;flex-direction:column;gap:1rem;">
+    <div style="display:flex;align-items:center;justify-content:space-between;">
+      <div>
+        <div style="font-weight:800;font-size:1.5rem;color:${C.ink};letter-spacing:-0.02em;">Dívidas</div>
+        <div style="font-size:0.8rem;color:${C.inkSoft}">${state.dividas.filter(d=>d.status==="Ativo").length} ativa(s)</div>
+      </div>
+      ${btn("Nova","modal-divida","accent",ICONS.plus)}
+    </div>
+    <div style="background:linear-gradient(135deg,${C.purple} 0%,#6D28D9 100%);border-radius:1rem;padding:1.25rem;">
+      <div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:0.75rem;">
+        <div>
+          <div style="color:#E9D5FF;font-size:0.65rem;font-weight:700;text-transform:uppercase;">Dívida Total Ativa</div>
+          <div style="color:#fff;font-weight:800;font-size:1.75rem;margin-top:0.25rem;letter-spacing:-0.02em;">${fmtBRL(dividaTotal)}</div>
+        </div>
+        <div style="padding:0.5rem;border-radius:0.75rem;background:rgba(255,255,255,0.2);color:#fff">${ICONS.alert}</div>
+      </div>
+      <div style="padding:0.75rem;border-radius:0.75rem;background:rgba(255,255,255,0.15);display:flex;justify-content:space-between;align-items:center;">
+        <span style="color:#E9D5FF;font-size:0.75rem;font-weight:600;">Compromisso mensal</span>
+        <span style="color:#fff;font-weight:800;">${fmtBRL(comprMensal)}</span>
+      </div>
+    </div>
+    ${items}
+  </div>`;
+}
+
+// ─── MODAL ────────────────────────────────────────
+function buildModal() {
+  let content = "";
+  if(state.modal==="lancamento") content = buildModalLancamento();
+  if(state.modal==="boleto")     content = buildModalBoleto();
+  if(state.modal==="nota")       content = buildModalNota();
+  if(state.modal==="divida")     content = buildModalDivida();
+  return `
+  <div class="modal-overlay" id="modal-overlay">
+    <div class="modal-box fade-in">
+      <div style="position:sticky;top:0;padding:1rem 1.25rem;display:flex;align-items:center;justify-content:space-between;background:#fff;border-bottom:1px solid ${C.border};">
+        <h3 style="font-weight:800;font-size:1rem;color:${C.ink};">${modalTitle()}</h3>
+        <button id="modal-close" style="padding:0.375rem;border:none;background:${C.borderSoft};border-radius:0.5rem;cursor:pointer;">${ICONS.x}</button>
+      </div>
+      <div style="padding:1.25rem;">${content}</div>
+    </div>
+  </div>`;
+}
+
+function modalTitle() {
+  return { lancamento:"Novo Lançamento", boleto:"Novo Boleto", nota:"Nova Nota a Receber", divida:"Nova Dívida" }[state.modal]||"";
+}
+
+function buildModalLancamento() {
+  const tipo = state.modalForm?.tipo || "Receita";
+  const cats = tipo==="Receita" ? CATEGORIAS_RECEITA : CATEGORIAS_DESPESA;
+  return `
+    <div style="display:flex;flex-direction:column;gap:0.875rem;">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.5rem;">
+        <button id="tipo-receita" class="btn" style="background:${tipo==="Receita"?C.green:C.borderSoft};color:${tipo==="Receita"?"#fff":C.inkSoft};">${ICONS.upArrow} Receita</button>
+        <button id="tipo-despesa" class="btn" style="background:${tipo==="Despesa"?C.red:C.borderSoft};color:${tipo==="Despesa"?"#fff":C.inkSoft};">${ICONS.downArrow} Despesa</button>
+      </div>
+      ${inputField("Descrição","f-descricao","text","","Ex: Frete SP - RJ")}
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.75rem;">
+        ${inputField("Data","f-data","date",todayISO())}
+        ${inputField("Valor (R$)","f-valor","number","","0,00","step=0.01")}
+      </div>
+      ${selectField("Categoria","f-categoria",cats)}
+      ${btn("Adicionar Lançamento","salvar-lancamento","primary",ICONS.plus,"w-full")}
+    </div>`;
+}
+
+function buildModalBoleto() {
+  return `
+    <div style="display:flex;flex-direction:column;gap:0.875rem;">
+      ${inputField("Fornecedor / Descrição","f-fornecedor","text","","Ex: Posto Shell")}
+      ${selectField("Categoria","f-categoria",CATEGORIAS_DESPESA)}
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.75rem;">
+        ${inputField("Valor (R$)","f-valor","number","","0,00","step=0.01")}
+        ${inputField("Vencimento","f-vencimento","date",todayISO())}
+      </div>
+      ${btn("Adicionar Boleto","salvar-boleto","primary",ICONS.plus,"w-full")}
+    </div>`;
+}
+
+function buildModalNota() {
+  return `
+    <div style="display:flex;flex-direction:column;gap:0.875rem;">
+      ${inputField("Cliente","f-cliente","text","","Ex: Transportadora ABC")}
+      ${inputField("Nº Nota Fiscal (opcional)","f-numnota","text","","001234")}
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.75rem;">
+        ${inputField("Valor (R$)","f-valor","number","","0,00","step=0.01")}
+        ${inputField("Vencimento","f-vencimento","date",todayISO())}
+      </div>
+      ${btn("Adicionar Nota","salvar-nota","primary",ICONS.plus,"w-full")}
+    </div>`;
+}
+
+function buildModalDivida() {
+  const tipos = ["Empréstimo","Financiamento","Parcelamento","Cartão"];
+  return `
+    <div style="display:flex;flex-direction:column;gap:0.875rem;">
+      ${inputField("Credor / Banco","f-credor","text","","Ex: Banco Itaú")}
+      ${selectField("Tipo","f-tipo",tipos)}
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.75rem;">
+        ${inputField("Valor Original","f-valoirig","number","","0,00","step=0.01")}
+        ${inputField("Saldo Devedor","f-saldo","number","","0,00","step=0.01")}
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:0.5rem;">
+        ${inputField("Parc. Total","f-parctot","number","")}
+        ${inputField("Parc. Pagas","f-parcpag","number","")}
+        ${inputField("Valor Parc.","f-parcval","number","","0,00","step=0.01")}
+      </div>
+      ${inputField("Próximo Venc.","f-proxvenc","date",todayISO())}
+      ${btn("Adicionar Dívida","salvar-divida","primary",ICONS.plus,"w-full")}
+    </div>`;
+}
+
+// ─── EMPTY STATE ──────────────────────────────────
+function buildEmpty(icon, title, hint) {
+  return `
+  <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;padding:2.5rem 1rem;text-align:center;">
+    <div style="padding:1rem;border-radius:1rem;background:${C.borderSoft};margin-bottom:0.75rem;color:${C.inkMute}">${icon}</div>
+    <div style="font-weight:700;font-size:0.95rem;color:${C.ink}">${title}</div>
+    <div style="font-size:0.8rem;color:${C.inkSoft};margin-top:0.25rem">${hint}</div>
+  </div>`;
+}
+
+// ─── EVENTS ───────────────────────────────────────
+function bindEvents() {
+  // tabs
+  document.querySelectorAll("[data-tab]").forEach(btn=>{
+    btn.addEventListener("click",()=>setState({tab:btn.dataset.tab, search:""}));
+  });
+
+  // modal open
+  const modalMap = { "modal-lancamento":"lancamento","modal-boleto":"boleto","modal-nota":"nota","modal-divida":"divida" };
+  Object.entries(modalMap).forEach(([id,mod])=>{
+    const el=document.getElementById(id);
+    if(el) el.addEventListener("click",()=>setState({modal:mod, modalForm:{tipo:"Receita"}}));
+  });
+
+  // modal close
+  const mc=document.getElementById("modal-close");
+  if(mc) mc.addEventListener("click",()=>setState({modal:null}));
+  const mo=document.getElementById("modal-overlay");
+  if(mo) mo.addEventListener("click",(e)=>{ if(e.target===mo) setState({modal:null}); });
+
+  // tipo toggle in lancamento modal
+  ["tipo-receita","tipo-despesa"].forEach(id=>{
+    const el=document.getElementById(id);
+    if(el) el.addEventListener("click",()=>{
+      setState({modalForm:{tipo:id==="tipo-receita"?"Receita":"Despesa"}});
+    });
+  });
+
+  // save lancamento
+  const sl=document.getElementById("salvar-lancamento");
+  if(sl) sl.addEventListener("click",()=>{
+    const desc=document.getElementById("f-descricao")?.value.trim();
+    const data=document.getElementById("f-data")?.value;
+    const valor=document.getElementById("f-valor")?.value;
+    const cat=document.getElementById("f-categoria")?.value;
+    const tipo=state.modalForm?.tipo||"Receita";
+    if(!desc||!valor||!cat) return alert("Preencha todos os campos.");
+    const arr=[{id:uid(),descricao:desc,data,valor:Number(valor),categoria:cat,tipo},...state.lancamentos];
+    persist("lancamentos",arr);
+    setState({modal:null});
+  });
+
+  // save boleto
+  const sb=document.getElementById("salvar-boleto");
+  if(sb) sb.addEventListener("click",()=>{
+    const forn=document.getElementById("f-fornecedor")?.value.trim();
+    const valor=document.getElementById("f-valor")?.value;
+    const venc=document.getElementById("f-vencimento")?.value;
+    const cat=document.getElementById("f-categoria")?.value;
+    if(!forn||!valor) return alert("Preencha Fornecedor e Valor.");
+    const arr=[{id:uid(),fornecedor:forn,valor:Number(valor),vencimento:venc,categoria:cat,status:"A Pagar"},...state.boletos];
+    persist("boletos",arr);
+    setState({modal:null});
+  });
+
+  // save nota
+  const sn=document.getElementById("salvar-nota");
+  if(sn) sn.addEventListener("click",()=>{
+    const cli=document.getElementById("f-cliente")?.value.trim();
+    const num=document.getElementById("f-numnota")?.value.trim();
+    const valor=document.getElementById("f-valor")?.value;
+    const venc=document.getElementById("f-vencimento")?.value;
+    if(!cli||!valor) return alert("Preencha Cliente e Valor.");
+    const arr=[{id:uid(),cliente:cli,numNota:num,valor:Number(valor),vencimento:venc,status:"A Receber"},...state.notas];
+    persist("notas",arr);
+    setState({modal:null});
+  });
+
+  // save divida
+  const sd=document.getElementById("salvar-divida");
+  if(sd) sd.addEventListener("click",()=>{
+    const cred=document.getElementById("f-credor")?.value.trim();
+    const tipo=document.getElementById("f-tipo")?.value||"Empréstimo";
+    const valoirig=document.getElementById("f-valoirig")?.value;
+    const saldo=document.getElementById("f-saldo")?.value;
+    const ptot=document.getElementById("f-parctot")?.value;
+    const ppag=document.getElementById("f-parcpag")?.value;
+    const pval=document.getElementById("f-parcval")?.value;
+    const prox=document.getElementById("f-proxvenc")?.value;
+    if(!cred||!saldo) return alert("Preencha Credor e Saldo Devedor.");
+    const arr=[{id:uid(),credor:cred,tipo,valorOriginal:Number(valoirig)||0,saldo:Number(saldo),
+      parcelaTotal:Number(ptot)||0,parcelaPaga:Number(ppag)||0,valorParcela:Number(pval)||0,
+      proxVenc:prox,status:"Ativo"},...state.dividas];
+    persist("dividas",arr);
+    setState({modal:null});
+  });
+
+  // delete
+  document.querySelectorAll(".del-btn").forEach(btn=>{
+    btn.addEventListener("click",()=>{
+      if(!confirm("Excluir este item?")) return;
+      const {id,mod}=btn.dataset;
+      persist(mod, state[mod].filter(i=>i.id!==id));
+    });
+  });
+
+  // toggle pago
+  document.querySelectorAll(".toggle-btn").forEach(btn=>{
+    btn.addEventListener("click",()=>{
+      const {id,mod}=btn.dataset;
+      if(mod==="boletos"){
+        persist("boletos",state.boletos.map(b=>b.id===id?{...b,status:b.status==="Pago"?"A Pagar":"Pago"}:b));
+      } else {
+        persist("notas",state.notas.map(n=>n.id===id?{...n,status:n.status==="Recebido"?"A Receber":"Recebido"}:n));
+      }
+    });
+  });
+
+  // parcela paga
+  document.querySelectorAll(".parcela-btn").forEach(btn=>{
+    btn.addEventListener("click",()=>{
+      const id=btn.dataset.id;
+      persist("dividas",state.dividas.map(d=>{
+        if(d.id!==id) return d;
+        const paga=(d.parcelaPaga||0)+1;
+        const saldo=Math.max(0,(d.saldo||0)-(d.valorParcela||0));
+        const status=paga>=d.parcelaTotal||saldo===0?"Quitado":"Ativo";
+        return {...d,parcelaPaga:paga,saldo,status};
+      }));
+    });
+  });
+
+  // search
+  const si=document.getElementById("search-input");
+  if(si) si.addEventListener("input",(e)=>{ state.search=e.target.value; render(); });
+}
+
+// ─── BOOT ─────────────────────────────────────────
+const appRoot = document.createElement("div");
+appRoot.id = "app-root";
+document.getElementById("root").appendChild(appRoot);
+render();
+</script>
+
+</body>
+</html>
